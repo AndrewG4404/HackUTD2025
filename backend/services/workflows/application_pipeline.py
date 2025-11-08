@@ -13,12 +13,15 @@ from services.agents.adoption_agent import AdoptionAgent
 from services.agents.summary_agent import SummaryAgent
 
 
-async def run_application_pipeline(evaluation_id: str) -> Dict[str, Any]:
+def run_application_pipeline(evaluation_id: str) -> Dict[str, Any]:
     """
     Run the complete application workflow pipeline.
-    
-    TODO: Implement full pipeline orchestration
+    Executes agents sequentially in a ReAct-like pattern.
     """
+    print(f"\n{'='*60}")
+    print(f"Starting Application Pipeline for Evaluation: {evaluation_id}")
+    print(f"{'='*60}\n")
+    
     # Load evaluation
     evaluation = get_evaluation(evaluation_id)
     if not evaluation:
@@ -36,42 +39,112 @@ async def run_application_pipeline(evaluation_id: str) -> Dict[str, Any]:
         if not vendor:
             raise ValueError("No vendor found in evaluation")
         
-        # Initialize agents
-        intake_agent = IntakeAgent()
-        verification_agent = VerificationAgent()
-        compliance_agent = ComplianceAgent()
-        interoperability_agent = InteroperabilityAgent()
-        finance_agent = FinanceAgent()
-        adoption_agent = AdoptionAgent()
-        summary_agent = SummaryAgent()
+        company_name = vendor.get("name", "Unknown")
+        print(f"Evaluating vendor: {company_name}\n")
         
-        # Build context
+        # Initialize agents
+        agents = {
+            "intake": IntakeAgent(),
+            "verification": VerificationAgent(),
+            "compliance": ComplianceAgent(),
+            "interoperability": InteroperabilityAgent(),
+            "finance": FinanceAgent(),
+            "adoption": AdoptionAgent()
+        }
+        
+        # Agent outputs storage
+        agent_outputs = {}
+        
+        # Build initial context
         context = {
             "vendor": vendor,
             "evaluation": evaluation
         }
         
-        # Run agents sequentially
-        # TODO: Implement actual agent execution and result aggregation
+        # Run agents sequentially (ReAct pattern: Reason → Act → Observe)
+        print("Executing agent pipeline...\n")
         
-        # Update evaluation with results
+        # 1. Intake Agent
+        print("[1/6] Running Intake Agent...")
+        agent_outputs["intake"] = agents["intake"].execute(context)
+        context["vendor"]["agent_outputs"] = agent_outputs
+        
+        # 2. Verification Agent
+        print("[2/6] Running Verification Agent...")
+        agent_outputs["verification"] = agents["verification"].execute(context)
+        context["vendor"]["agent_outputs"] = agent_outputs
+        
+        # 3. Compliance Agent (with RAG)
+        print("[3/6] Running Compliance Agent (with RAG)...")
+        agent_outputs["compliance"] = agents["compliance"].execute(context)
+        context["vendor"]["agent_outputs"] = agent_outputs
+        
+        # 4. Interoperability Agent
+        print("[4/6] Running Interoperability Agent...")
+        agent_outputs["interoperability"] = agents["interoperability"].execute(context)
+        context["vendor"]["agent_outputs"] = agent_outputs
+        
+        # 5. Finance Agent
+        print("[5/6] Running Finance Agent...")
+        agent_outputs["finance"] = agents["finance"].execute(context)
+        context["vendor"]["agent_outputs"] = agent_outputs
+        
+        # 6. Adoption Agent
+        print("[6/6] Running Adoption Agent...")
+        agent_outputs["adoption"] = agents["adoption"].execute(context)
+        context["vendor"]["agent_outputs"] = agent_outputs
+        
+        # Calculate total score (average of dimension scores)
+        scores = [
+            agent_outputs.get("compliance", {}).get("score", 0),
+            agent_outputs.get("interoperability", {}).get("score", 0),
+            agent_outputs.get("finance", {}).get("score", 0),
+            agent_outputs.get("adoption", {}).get("score", 0)
+        ]
+        total_score = sum(scores) / len(scores) if scores else 0
+        
+        print(f"\n Dimension scores calculated: {total_score:.2f}/5")
+        
+        # 7. Summary Agent (aggregates all outputs)
+        print("[7/7] Running Summary Agent...")
+        summary_agent = SummaryAgent()
+        summary_output = summary_agent.execute(context)
+        
+        # Prepare update data
         update_data = {
             "status": "completed",
-            "vendors.0.agent_outputs": {
-                # TODO: Add actual agent outputs
-            },
-            "recommendation": {
-                # TODO: Add recommendation
-            },
-            "onboarding_checklist": []
+            "vendors": [{
+                **vendor,
+                "agent_outputs": agent_outputs,
+                "total_score": round(total_score, 2)
+            }],
+            "onboarding_checklist": summary_output.get("onboarding_checklist", [])
         }
         
+        # Add recommendation if this is for a single vendor
+        update_data["recommendation"] = {
+            "vendor_id": vendor.get("id", "vendor-1"),
+            "reason": summary_output.get("recommendation", "Evaluation completed")
+        }
+        
+        # Update MongoDB
         update_evaluation(evaluation_id, update_data)
         
-        return {"status": "completed"}
+        print(f"\n{'='*60}")
+        print(f"Pipeline Complete!")
+        print(f"Final Score: {total_score:.2f}/5")
+        print(f"Recommendation: {summary_output.get('recommendation', 'N/A')}")
+        print(f"{'='*60}\n")
+        
+        return {
+            "status": "completed",
+            "total_score": total_score,
+            "recommendation": summary_output.get("recommendation")
+        }
     
     except Exception as e:
         # Update status to failed
+        print(f"\n❌ Pipeline failed: {str(e)}\n")
         update_evaluation(evaluation_id, {
             "status": "failed",
             "error": str(e)
