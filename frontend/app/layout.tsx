@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import Header from '@/components/Header'
 
 export const metadata: Metadata = {
   title: 'VendorLens - Secure & Intelligent Vendor Onboarding',
@@ -12,8 +13,13 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" className="dark">
+      <body>
+        <Header />
+        <main className="pt-16">
+          {children}
+        </main>
+      </body>
     </html>
   )
 }

@@ -1,12 +1,14 @@
 /**
- * Assessment Setup Page
- * Form for internal users to set up vendor comparison
+ * Assessment Setup Page - Dark Theme Internal Dashboard
+ * Form for internal users (Goldman Sachs) to set up vendor comparison
  */
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
+import Card from '@/components/ui/Card'
+import Button from '@/components/ui/Button'
 
 interface Vendor {
   id: string
@@ -84,17 +86,21 @@ export default function AssessPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 py-12">
-      <div className="container mx-auto px-4 max-w-4xl">
-        <h1 className="text-3xl font-bold mb-8 text-gray-900">Vendor Assessment & Comparison</h1>
+    <div className="min-h-screen bg-[#0a0a0a] py-12">
+      <div className="container mx-auto px-4 max-w-5xl">
+        {/* Page Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold mb-2 text-white">Vendor Assessment & Comparison</h1>
+          <p className="text-gray-400">Compare multiple vendors and get AI-powered recommendations</p>
+        </div>
         
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-8 space-y-8">
-          {/* Basic Info */}
-          <div>
-            <h2 className="text-xl font-semibold mb-4">Assessment Details</h2>
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Assessment Details */}
+          <Card>
+            <h2 className="text-xl font-semibold mb-6 text-white">Assessment Details</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Evaluation Name *
                 </label>
                 <input
@@ -102,11 +108,12 @@ export default function AssessPage() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-4 py-3 bg-[#0f0f0f] border border-gray-800 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="e.g., Q1 2025 Vendor Evaluation"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Use Case Description *
                 </label>
                 <textarea
@@ -114,21 +121,25 @@ export default function AssessPage() {
                   value={formData.use_case}
                   onChange={(e) => setFormData({ ...formData, use_case: e.target.value })}
                   rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-4 py-3 bg-[#0f0f0f] border border-gray-800 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                  placeholder="Describe the use case, requirements, and evaluation criteria..."
                 />
               </div>
             </div>
-          </div>
+          </Card>
 
-          {/* Weights */}
-          <div>
-            <h2 className="text-xl font-semibold mb-4">Priority Weights (0-5)</h2>
-            <div className="grid grid-cols-2 gap-4">
+          {/* Priority Weights */}
+          <Card>
+            <h2 className="text-xl font-semibold mb-6 text-white">Priority Weights (0-5)</h2>
+            <div className="grid grid-cols-2 gap-6">
               {Object.entries(formData.weights).map(([key, value]) => (
                 <div key={key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 capitalize">
-                    {key}
-                  </label>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-gray-300 capitalize">
+                      {key}
+                    </label>
+                    <span className="text-lg font-semibold text-blue-400">{value}</span>
+                  </div>
                   <input
                     type="range"
                     min="0"
@@ -138,24 +149,32 @@ export default function AssessPage() {
                       ...formData,
                       weights: { ...formData.weights, [key]: parseInt(e.target.value) }
                     })}
-                    className="w-full"
+                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
                   />
-                  <div className="text-center text-sm text-gray-600">{value}</div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>Low</span>
+                    <span>High</span>
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
 
           {/* Vendors */}
           <div>
-            <h2 className="text-xl font-semibold mb-4">Vendors</h2>
+            <h2 className="text-xl font-semibold mb-6 text-white">Vendors</h2>
             <div className="space-y-6">
               {vendors.map((vendor, index) => (
-                <div key={vendor.id} className="border border-gray-200 rounded-lg p-4">
-                  <h3 className="font-medium mb-4">Vendor {String.fromCharCode(65 + index)}</h3>
+                <Card key={vendor.id}>
+                  <div className="flex items-center mb-6">
+                    <div className="w-10 h-10 bg-cyan-600/20 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-cyan-400 font-bold">{String.fromCharCode(65 + index)}</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white">Vendor {String.fromCharCode(65 + index)}</h3>
+                  </div>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
                         Vendor Name *
                       </label>
                       <input
@@ -167,11 +186,12 @@ export default function AssessPage() {
                           newVendors[index].name = e.target.value
                           setVendors(newVendors)
                         }}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                        className="w-full px-4 py-3 bg-[#0f0f0f] border border-gray-800 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        placeholder="Company name"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
                         Website URL *
                       </label>
                       <input
@@ -183,27 +203,40 @@ export default function AssessPage() {
                           newVendors[index].website = e.target.value
                           setVendors(newVendors)
                         }}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                        className="w-full px-4 py-3 bg-[#0f0f0f] border border-gray-800 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        placeholder="https://example.com"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
                         Documents
                       </label>
-                      <input
-                        type="file"
-                        multiple
-                        accept=".pdf,.doc,.docx"
-                        onChange={(e) => {
-                          const newVendors = [...vendors]
-                          newVendors[index].files = Array.from(e.target.files || [])
-                          setVendors(newVendors)
-                        }}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-md"
-                      />
+                      <div className="border-2 border-dashed border-gray-700 rounded-md p-4 hover:border-blue-500 transition-colors">
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf,.doc,.docx"
+                          onChange={(e) => {
+                            const newVendors = [...vendors]
+                            newVendors[index].files = Array.from(e.target.files || [])
+                            setVendors(newVendors)
+                          }}
+                          className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+                        />
+                        {vendor.files.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-sm text-gray-400 mb-2">Selected files:</p>
+                            <ul className="list-disc list-inside text-sm text-gray-500">
+                              {vendor.files.map((file, idx) => (
+                                <li key={idx}>{file.name}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
                         Document URLs (comma-separated)
                       </label>
                       <input
@@ -214,25 +247,37 @@ export default function AssessPage() {
                           newVendors[index].doc_urls = e.target.value
                           setVendors(newVendors)
                         }}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                        className="w-full px-4 py-3 bg-[#0f0f0f] border border-gray-800 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        placeholder="https://example.com/security, https://example.com/privacy"
                       />
                     </div>
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-md font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Creating Assessment...' : 'Start Assessment'}
-          </button>
+          <div className="pt-4">
+            <Button 
+              type="submit" 
+              disabled={loading}
+              className="w-full"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating Assessment...
+                </span>
+              ) : (
+                'Start Assessment'
+              )}
+            </Button>
+          </div>
         </form>
       </div>
-    </main>
+    </div>
   )
 }
-
