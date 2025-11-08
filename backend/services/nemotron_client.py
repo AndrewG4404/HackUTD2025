@@ -1,78 +1,118 @@
 """
-Nemotron API client
-Wrapper for interacting with Nemotron LLM API
+Nemotron API client using NVIDIA API endpoints
+Uses OpenAI-compatible interface
 """
 import os
 import httpx
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+from openai import OpenAI
+from bs4 import BeautifulSoup
 
 
 class NemotronClient:
-    """Client for Nemotron API"""
+    """Client for NVIDIA Nemotron API using OpenAI-compatible interface"""
     
     def __init__(self):
-        self.api_url = os.getenv("NEMOTRON_API_URL", "https://api.nemotron.ai/v1")
         self.api_key = os.getenv("NEMOTRON_API_KEY", "")
-        self.client = httpx.AsyncClient(
-            base_url=self.api_url,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            },
-            timeout=60.0
+        self.model = os.getenv("NEMOTRON_MODEL", "nvidia/nvidia-nemotron-nano-9b-v2")
+        
+        # Initialize OpenAI client with NVIDIA endpoint
+        self.client = OpenAI(
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key=self.api_key
         )
     
-    async def chat_completion(
+    def chat_completion(
         self,
-        messages: list,
-        model: str = "nemotron",
+        messages: List[Dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: Optional[int] = None
-    ) -> Dict[str, Any]:
+        max_tokens: int = 2048
+    ) -> str:
         """
         Send chat completion request to Nemotron API.
         
         Args:
             messages: List of message dicts with 'role' and 'content'
-            model: Model name to use
+            temperature: Sampling temperature (0.0-1.0)
+            max_tokens: Maximum tokens to generate
+        
+        Returns:
+            Generated text response
+        """
+        try:
+            completion = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=False  # Simple non-streaming for MVP
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(f"Error calling Nemotron API: {e}")
+            raise
+    
+    def chat_completion_json(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 2048
+    ) -> str:
+        """
+        Request JSON-formatted response from Nemotron.
+        
+        Args:
+            messages: List of message dicts with 'role' and 'content'
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
         
         Returns:
-            API response dictionary
+            Generated JSON response as string
         """
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature
-        }
+        # Add JSON instruction to system message
+        json_instruction = "\nYou must respond with valid JSON only. No other text."
         
-        if max_tokens:
-            payload["max_tokens"] = max_tokens
+        modified_messages = messages.copy()
+        if modified_messages and modified_messages[0]["role"] == "system":
+            modified_messages[0]["content"] += json_instruction
+        else:
+            modified_messages.insert(0, {"role": "system", "content": json_instruction})
         
-        response = await self.client.post("/chat/completions", json=payload)
-        response.raise_for_status()
-        return response.json()
+        return self.chat_completion(modified_messages, temperature, max_tokens)
     
-    async def fetch_url(self, url: str) -> str:
+    def fetch_url(self, url: str) -> str:
         """
-        Fetch content from a URL.
-        TODO: Implement web scraping or use Nemotron's tool if available
+        Fetch and extract text content from a URL.
+        
+        Args:
+            url: URL to fetch
+        
+        Returns:
+            Extracted text content
         """
-        # For now, this is a placeholder
-        # In production, you might want to:
-        # 1. Use httpx to fetch the URL
-        # 2. Parse HTML with BeautifulSoup
-        # 3. Extract text content
-        # 4. Return cleaned text
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=10.0)
+        try:
+            response = httpx.get(url, timeout=10.0, follow_redirects=True)
             response.raise_for_status()
-            return response.text
-    
-    async def close(self):
-        """Close the HTTP client"""
-        await self.client.aclose()
+            
+            # Parse HTML and extract text
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+            
+            # Get text
+            text = soup.get_text()
+            
+            # Clean up whitespace
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = ' '.join(chunk for chunk in chunks if chunk)
+            
+            return text[:10000]  # Limit to first 10k chars for MVP
+        except Exception as e:
+            print(f"Error fetching URL {url}: {e}")
+            return f"Error fetching URL: {str(e)}"
 
 
 # Global client instance

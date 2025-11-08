@@ -165,9 +165,47 @@ See `.env.example` for required environment variables:
 - `UPLOAD_DIR` - Directory for file uploads
 - `NEXT_PUBLIC_API_URL` - Backend API URL for frontend
 
+## Agent Workflow (Teammate #2)
+
+### ✅ Implemented Components
+
+**Nemotron Client** (`backend/services/nemotron_client.py`)
+- OpenAI-compatible client for NVIDIA Nemotron API
+- Chat completion with JSON support
+- Web scraping for URL fetching
+
+**Document Processor** (`backend/services/document_processor.py`)
+- PDF text extraction with PyPDF2
+- Simple RAG retrieval (context-based search)
+- Text chunking utilities
+
+**7 Specialized Agents** (`backend/services/agents/`)
+1. **IntakeAgent** - Normalizes vendor data
+2. **VerificationAgent** - Fact-checks against website
+3. **ComplianceAgent** - Evaluates compliance with RAG
+4. **InteroperabilityAgent** - Assesses technical fit
+5. **FinanceAgent** - Analyzes pricing and TCO
+6. **AdoptionAgent** - Evaluates support capabilities
+7. **SummaryAgent** - Aggregates and recommends
+
+**Application Pipeline** (`backend/services/workflows/application_pipeline.py`)
+- Sequential agent orchestration (ReAct pattern)
+- Progress tracking and error handling
+- MongoDB integration
+
+### 🧪 Testing
+
+```bash
+# Test the agent workflow
+python backend/test_agent_workflow.py
+
+# Or test via API after starting the backend
+curl -X POST "http://localhost:8000/api/workflows/application/{evaluation_id}/run"
+```
+
 ## Development Rules
 
-**🎯 Using Cursor AI? Read `.cursorrules` and `DEVELOPMENT_RULES.md` first!**
+**🎯 Using Cursor AI? Read `.cursorrules` first!**
 
 Key principles:
 - Keep solutions simple - avoid over-engineering
@@ -187,3 +225,12 @@ Key principles:
 ## License
 
 MIT
+
+Winning projects will showcase true agentic behavior:
+Multi-Agent Systems: Build teams of specialized AI agents
+(like Report Generator: Research Agent → Outline Agent → Writer Agent → Editor)
+Agentic RAG: Systems that intelligently decide WHEN to retrieve information, not just HOW (perfect for domain-specific assistants)
+ReAct Pattern Workflows: Agents that Reason → Act → Observe in loops to solve problems iteratively (like automated debugging or technical support)
+Tool-Calling Applications: Leverage Nemotron's exceptional ability to use external APIs and tools (finance analysis, DevOps automation, content creation)
+Multi-Modal Agents: Combine Nemotron reasoning with VLMs (visual analysis + logical decision-making)
+Agent Simulation & Evaluation: Use Nemotron to generate realistic test scenarios and evaluation pipelines

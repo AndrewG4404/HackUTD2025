@@ -12,21 +12,68 @@ class VerificationAgent(BaseAgent):
     def __init__(self):
         super().__init__("Verification Agent", "Fact Checker")
     
-    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Verify vendor information.
-        
-        TODO: Implement website fetching and fact-checking logic
+        Verify vendor information against website.
         """
-        # TODO: Fetch website content
-        # TODO: Build prompt for fact-checking
-        # TODO: Call LLM and parse verification flags
+        vendor = context.get("vendor", {})
         
-        return {
-            "flags": {
-                "name_match": "unknown",
-                "website_match": "unknown",
-                "location_match": "unknown"
+        company_name = vendor.get("name", "")
+        website = vendor.get("website", "")
+        hq_location = vendor.get("hq_location", "")
+        
+        # Fetch website content
+        website_content = ""
+        if website:
+            try:
+                website_content = self.client.fetch_url(website)
+            except Exception as e:
+                print(f"[{self.name}] Error fetching website: {e}")
+        
+        system_prompt = f"""You are a {self.role} verifying vendor information.
+Your task is to check if claimed information matches what's found on their website."""
+        
+        user_prompt = f"""Verify the following vendor information against their website content.
+
+Claimed Information:
+- Company Name: {company_name}
+- Website: {website}
+- HQ Location: {hq_location}
+
+Website Content:
+{website_content[:2000] if website_content else "Unable to fetch website content"}
+
+For each field, determine if there is a match, mismatch, or if it's unknown.
+Provide your assessment in JSON format:
+{{
+  "flags": {{
+    "name_match": "match" or "mismatch" or "unknown",
+    "website_match": "match" or "mismatch" or "unknown",
+    "location_match": "match" or "mismatch" or "unknown"
+  }}
+}}"""
+        
+        try:
+            result = self._call_llm_json(user_prompt, system_prompt)
+            
+            # Ensure flags exist
+            if not result.get("flags"):
+                result["flags"] = {
+                    "name_match": "unknown",
+                    "website_match": "unknown",
+                    "location_match": "unknown"
+                }
+            
+            print(f"[{self.name}] Verification complete for {company_name}")
+            return result
+            
+        except Exception as e:
+            print(f"[{self.name}] Error: {e}")
+            return {
+                "flags": {
+                    "name_match": "unknown",
+                    "website_match": "unknown",
+                    "location_match": "unknown"
+                }
             }
-        }
 
