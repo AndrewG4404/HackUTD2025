@@ -1,0 +1,311 @@
+# Cursor AI Developer Rules for VendorLens Project
+
+## Core Principles
+
+### 1. Simplicity First
+- Write simple, working solutions over complex architectures
+- Avoid over-engineering and unnecessary abstractions
+- Use standard libraries and patterns - no exotic solutions
+- If it works simply, ship it
+
+### 2. DRY (Don't Repeat Yourself)
+- Reuse existing code, functions, and components
+- Extract common logic into shared utilities
+- Reference existing schemas, types, and models
+- Before writing new code, check if it already exists
+
+### 3. No Hallucinations
+- Only reference files, functions, and APIs that actually exist
+- Verify imports and dependencies are real
+- Don't invent features or endpoints not in the spec
+- When unsure, read the file first
+
+### 4. Stick to the Scope
+- **Always reference** `@ReadMe.md` for project goals and requirements
+- Stay within MVP boundaries - no auth, no complex features
+- Follow the PRD specifications exactly
+- Don't add features not requested
+
+### 5. Documentation Rules
+- **ONLY ONE README**: `README.md` at project root
+- **NO** additional README files per feature/solution
+- **NO** summary documents unless explicitly requested
+- Use inline comments and docstrings for code documentation
+- API docs go in `backend/API_TESTING.md` or `backend/OPENAPI_NOTES.md`
+
+## Project Structure Rules
+
+### File Organization
+```
+VendorLens/
+├── README.md                    ← ONLY README FILE
+├── .cursorrules                 ← This file
+├── backend/                     ← Python/FastAPI
+│   ├── api/routes/             ← API endpoints only
+│   ├── database/               ← Models & repository
+│   ├── services/               ← Business logic
+│   └── main.py                 ← Entry point
+└── frontend/                    ← Next.js/React
+    ├── app/                    ← Pages
+    └── lib/                    ← Utilities
+```
+
+### What NOT to Create
+- ❌ README files in subdirectories
+- ❌ SUMMARY.md files
+- ❌ OVERVIEW.md files
+- ❌ Feature-specific documentation files
+- ❌ Duplicate utility functions
+- ❌ Wrapper classes for simple operations
+
+## Tech Stack Constraints
+
+### Backend (Python/FastAPI)
+- Use FastAPI built-in features (validation, docs, middleware)
+- Standard library first, external packages second
+- MongoDB with pymongo (no ODM complexity)
+- Simple HTTP client (httpx) for Nemotron
+- No authentication/authorization (MVP scope)
+
+### Frontend (Next.js)
+- Next.js 14 App Router (no Pages Router)
+- Tailwind CSS for styling (no custom CSS files)
+- Axios for API calls (centralized in `lib/api.ts`)
+- Minimal external dependencies
+
+### Database
+- MongoDB with simple document structure
+- No complex aggregations or pipelines (MVP scope)
+- Use Pydantic models for validation
+- Keep queries simple and readable
+
+## Coding Standards
+
+### Python (Backend)
+```python
+# ✅ Good - Simple and clear
+async def get_evaluation(evaluation_id: str) -> dict:
+    db = get_database()
+    return db.evaluations.find_one({"_id": ObjectId(evaluation_id)})
+
+# ❌ Bad - Over-engineered
+class EvaluationRepository(AbstractRepository):
+    def __init__(self, db_connection: DatabaseConnection):
+        self.session = db_connection.get_session()
+    async def find_by_id(self, id: str) -> Optional[EvaluationEntity]:
+        # ... complex ORM logic
+```
+
+### TypeScript (Frontend)
+```typescript
+// ✅ Good - Direct and functional
+export async function getEvaluation(id: string) {
+  const response = await axios.get(`${API_URL}/evaluations/${id}`)
+  return response.data
+}
+
+// ❌ Bad - Unnecessary class
+class EvaluationService {
+  private api: ApiClient
+  constructor(config: ApiConfig) { ... }
+  async getById(id: string): Promise<Evaluation> { ... }
+}
+```
+
+## Agent Development Rules
+
+### Agent Structure
+- All agents extend `BaseAgent`
+- Keep agent logic in the `execute()` method
+- Don't create complex agent hierarchies
+- Store outputs in MongoDB directly (no intermediate layers)
+
+### Workflow Orchestration
+- Sequential execution is fine for MVP
+- Update status in MongoDB after each step
+- Handle errors with try/catch, log, and set status to "failed"
+- No queue systems, no async workers (MVP scope)
+
+## API Development Rules
+
+### Endpoints
+- Follow RESTful conventions
+- Use standard HTTP methods (GET, POST)
+- Return standard status codes (200, 201, 202, 400, 404, 500)
+- Multipart form-data for file uploads
+- JSON for all other requests/responses
+
+### Validation
+- Use Pydantic models for validation
+- FastAPI handles validation automatically
+- Return clear error messages
+- Don't create custom validation layers
+
+### Response Format
+```python
+# ✅ Good - Standard response
+return {"id": evaluation_id, "status": "pending", "type": "application"}
+
+# ❌ Bad - Over-structured
+return {
+    "data": {"id": evaluation_id},
+    "meta": {"status": 200, "timestamp": ...},
+    "links": {"self": "/api/evaluations/..."}
+}
+```
+
+## Frontend Development Rules
+
+### Components
+- Functional components only (no class components)
+- Use hooks for state management
+- Keep components in the same file unless reused 3+ times
+- Inline styles are fine with Tailwind
+
+### State Management
+- `useState` for local state
+- No Redux, Zustand, or global state (MVP scope)
+- Lift state only when necessary
+- Server state is source of truth
+
+### API Calls
+- Use centralized `lib/api.ts` client
+- Handle loading and error states
+- Poll for long-running operations (simple setInterval)
+- No complex caching or state synchronization
+
+## Common Pitfalls to Avoid
+
+### ❌ Don't Do This
+1. Create abstraction layers for single-use cases
+2. Write custom authentication middleware (no auth in MVP)
+3. Add logging frameworks (use print/console.log)
+4. Create database migrations (schema in code is fine)
+5. Write unit tests (focus on working code first)
+6. Add API versioning (single version for MVP)
+7. Create separate config files per environment
+8. Build custom error handling classes
+9. Write decorators for simple operations
+10. Create multiple README or summary files
+
+### ✅ Do This Instead
+1. Write inline code that works
+2. Skip auth completely
+3. Use print() and console.log()
+4. Define schema in Pydantic models
+5. Manual testing with Swagger UI
+6. Single API version, no /v1/ prefix
+7. One .env file with all config
+8. Standard try/catch blocks
+9. Regular functions
+10. Update the single README.md only when necessary
+
+## Code Review Checklist
+
+Before implementing any feature, ask:
+- [ ] Is this in the PRD/README.md scope?
+- [ ] Is this the simplest solution?
+- [ ] Am I reusing existing code?
+- [ ] Does this file/function already exist?
+- [ ] Am I creating unnecessary documentation files?
+- [ ] Can I use a standard library instead?
+- [ ] Is this tested in Swagger UI (backend) or browser (frontend)?
+
+## Error Handling Pattern
+
+### Backend
+```python
+try:
+    # Do the work
+    result = do_something()
+    return result
+except Exception as e:
+    # Log and return error
+    print(f"Error: {e}")
+    raise HTTPException(status_code=500, detail=str(e))
+```
+
+### Frontend
+```typescript
+try {
+  setLoading(true)
+  const result = await api.doSomething()
+  setData(result)
+} catch (error) {
+  console.error('Error:', error)
+  alert('Error occurred. Please try again.')
+} finally {
+  setLoading(false)
+}
+```
+
+## File Naming Conventions
+
+### Backend
+- `snake_case.py` for Python files
+- `lowercase` for packages/directories
+- No prefixes (no `I` for interfaces, no `Abstract` unless truly abstract)
+
+### Frontend
+- `PascalCase.tsx` for components
+- `camelCase.ts` for utilities
+- `kebab-case` for directories
+
+## Dependencies
+
+### Only Add Dependencies If:
+1. It saves significant development time
+2. It's a well-maintained, popular package
+3. It doesn't add complexity
+4. You can't easily implement it yourself
+
+### Standard Dependencies (Already Approved)
+- Backend: fastapi, uvicorn, pymongo, pydantic, httpx, python-dotenv
+- Frontend: next, react, axios, tailwindcss
+
+## When Implementing New Features
+
+### Step-by-Step Process:
+1. **Read** `@ReadMe.md` to confirm scope
+2. **Check** if similar code exists
+3. **Implement** the simplest solution
+4. **Test** manually (Swagger UI or browser)
+5. **Update** code comments if complex
+6. **NO** additional documentation files
+
+## MongoDB Patterns
+
+### Simple and Direct
+```python
+# ✅ Good
+db.evaluations.insert_one(evaluation_dict)
+db.evaluations.find_one({"_id": ObjectId(id)})
+db.evaluations.update_one({"_id": ObjectId(id)}, {"$set": update_dict})
+
+# ❌ Bad - Don't create repository classes for every operation
+class EvaluationRepository:
+    def insert(self, entity): ...
+    def find_by_id(self, id): ...
+    def update(self, id, data): ...
+```
+
+## Final Reminders
+
+### ALWAYS
+- Keep it simple
+- Reuse code
+- Reference existing implementations
+- Stay in scope
+- One README.md only
+
+### NEVER
+- Over-engineer
+- Duplicate code
+- Hallucinate features
+- Add out-of-scope features
+- Create README summaries
+
+---
+
+**When in doubt, choose the simpler solution.**
+

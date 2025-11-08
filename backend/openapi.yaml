@@ -1,0 +1,740 @@
+openapi: 3.0.3
+info:
+  title: VendorLens API
+  description: |
+    Secure & Intelligent Vendor Onboarding Hub
+    
+    This API provides endpoints for vendor onboarding workflows powered by AI agents.
+    It supports two main workflows:
+    1. **Vendor Application** - Single vendor applies for onboarding
+    2. **Vendor Assessment & Comparison** - Internal team compares multiple vendors
+  version: 1.0.0
+  contact:
+    name: VendorLens Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Evaluations
+    description: Core evaluation CRUD operations
+  - name: Workflows
+    description: AI agent workflow execution
+
+paths:
+  /api/health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check if the API is running
+      operationId: healthCheck
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/evaluations/apply:
+    post:
+      tags:
+        - Evaluations
+      summary: Create vendor application
+      description: |
+        Create an application-type evaluation from vendor-submitted form.
+        This endpoint accepts multipart/form-data with vendor information and optional document uploads.
+      operationId: createApplicationEvaluation
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - name
+                - website
+                - contact_email
+              properties:
+                name:
+                  type: string
+                  description: Company name
+                  example: Acme Corp
+                website:
+                  type: string
+                  format: uri
+                  description: Company website URL
+                  example: https://acme.com
+                contact_email:
+                  type: string
+                  format: email
+                  description: Contact email address
+                  example: contact@acme.com
+                hq_location:
+                  type: string
+                  description: Headquarters location (city, country)
+                  example: Austin, TX
+                product_name:
+                  type: string
+                  description: Product name
+                  example: Acme CRM
+                product_description:
+                  type: string
+                  description: Short product description
+                  example: Enterprise CRM solution for mid-market companies
+                doc_urls:
+                  type: string
+                  description: JSON array of document URLs as string
+                  example: '["https://acme.com/security", "https://acme.com/privacy"]'
+                docs:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Document files (PDFs, docs)
+      responses:
+        '201':
+          description: Evaluation created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationCreateResponse'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/evaluations/assess:
+    post:
+      tags:
+        - Evaluations
+      summary: Create vendor assessment
+      description: |
+        Create an assessment-type evaluation for comparing multiple vendors.
+        This endpoint accepts multipart/form-data with use case, weights, and vendor information.
+      operationId: createAssessmentEvaluation
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - name
+                - use_case
+                - weights
+                - vendors
+              properties:
+                name:
+                  type: string
+                  description: Evaluation name
+                  example: CRM Vendor Comparison
+                use_case:
+                  type: string
+                  description: Use case description
+                  example: Sales CRM for mid-market companies with 200 users
+                weights:
+                  type: string
+                  description: JSON object with dimension weights (0-5)
+                  example: '{"security": 4, "cost": 3, "interoperability": 5, "adoption": 2}'
+                vendors:
+                  type: string
+                  description: JSON array of vendor objects with id, name, website
+                  example: '[{"id": "vendor-a", "name": "Vendor A", "website": "https://vendor-a.com"}]'
+      responses:
+        '201':
+          description: Assessment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationCreateResponse'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/evaluations/{id}:
+    get:
+      tags:
+        - Evaluations
+      summary: Get evaluation by ID
+      description: |
+        Retrieve a specific evaluation by ID.
+        Returns simplified view while running, full details when completed.
+      operationId: getEvaluation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Evaluation ID
+          schema:
+            type: string
+            example: 665f1c2a3b4d5e6f7a8b9c0d
+      responses:
+        '200':
+          description: Evaluation found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Evaluation'
+        '404':
+          description: Evaluation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/evaluations:
+    get:
+      tags:
+        - Evaluations
+      summary: List all evaluations
+      description: |
+        Retrieve a list of all evaluations with basic information.
+        Results are sorted by creation date (newest first).
+      operationId: listEvaluations
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+        - name: skip
+          in: query
+          description: Number of results to skip (for pagination)
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: List of evaluations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EvaluationSummary'
+
+  /api/workflows/application/{evaluation_id}/run:
+    post:
+      tags:
+        - Workflows
+      summary: Run application workflow
+      description: |
+        Execute the complete application workflow pipeline for a vendor application.
+        This runs all AI agents sequentially: Intake → Verification → Compliance → 
+        Interoperability → Finance → Adoption → Summary
+      operationId: runApplicationWorkflow
+      parameters:
+        - name: evaluation_id
+          in: path
+          required: true
+          description: Evaluation ID
+          schema:
+            type: string
+            example: 665f1c2a3b4d5e6f7a8b9c0d
+      responses:
+        '202':
+          description: Workflow started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowResponse'
+        '404':
+          description: Evaluation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Invalid evaluation type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/workflows/assessment/{evaluation_id}/run:
+    post:
+      tags:
+        - Workflows
+      summary: Run assessment workflow
+      description: |
+        Execute the complete assessment workflow pipeline for vendor comparison.
+        This runs: Use Case Context Agent → Per-vendor agents → Comparison Agent
+      operationId: runAssessmentWorkflow
+      parameters:
+        - name: evaluation_id
+          in: path
+          required: true
+          description: Evaluation ID
+          schema:
+            type: string
+            example: 665f1d2a3b4d5e6f7a8b9c0e
+      responses:
+        '202':
+          description: Workflow started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowResponse'
+        '404':
+          description: Evaluation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Invalid evaluation type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    EvaluationCreateResponse:
+      type: object
+      required:
+        - id
+        - status
+        - type
+      properties:
+        id:
+          type: string
+          description: Unique evaluation ID
+          example: 665f1c2a3b4d5e6f7a8b9c0d
+        status:
+          type: string
+          enum: [pending]
+          description: Initial status is always pending
+          example: pending
+        type:
+          type: string
+          enum: [application, assessment]
+          description: Type of evaluation
+          example: application
+
+    WorkflowResponse:
+      type: object
+      required:
+        - id
+        - type
+        - status
+      properties:
+        id:
+          type: string
+          description: Evaluation ID
+          example: 665f1c2a3b4d5e6f7a8b9c0d
+        type:
+          type: string
+          enum: [application, assessment]
+          description: Type of evaluation
+          example: application
+        status:
+          type: string
+          enum: [running]
+          description: Status after workflow starts
+          example: running
+
+    EvaluationSummary:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          description: Unique evaluation ID
+          example: 665f1c2a3b4d5e6f7a8b9c0d
+        name:
+          type: string
+          description: Evaluation name
+          example: Acme Corp Application
+        type:
+          type: string
+          enum: [application, assessment]
+          description: Type of evaluation
+          example: application
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+          description: Current status
+          example: completed
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: '2025-11-08T12:34:56Z'
+
+    Evaluation:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - status
+        - created_at
+        - vendors
+      properties:
+        id:
+          type: string
+          description: Unique evaluation ID
+          example: 665f1c2a3b4d5e6f7a8b9c0d
+        type:
+          type: string
+          enum: [application, assessment]
+          description: Type of evaluation
+          example: application
+        name:
+          type: string
+          description: Evaluation name
+          example: Acme Corp Application
+        use_case:
+          type: string
+          nullable: true
+          description: Use case description (assessment only)
+          example: Sales CRM for mid-market companies
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: '2025-11-08T12:34:56Z'
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+          description: Current processing status
+          example: completed
+        weights:
+          $ref: '#/components/schemas/Weights'
+        requirement_profile:
+          $ref: '#/components/schemas/RequirementProfile'
+        vendors:
+          type: array
+          description: List of vendors being evaluated
+          items:
+            $ref: '#/components/schemas/Vendor'
+        recommendation:
+          $ref: '#/components/schemas/Recommendation'
+        onboarding_checklist:
+          type: array
+          description: Action items for onboarding
+          items:
+            type: string
+          example:
+            - Request DPA and security questionnaire
+            - Set up SSO and MFA
+            - Define roles and least-privilege access
+        error:
+          type: string
+          nullable: true
+          description: Error message if status is failed
+          example: null
+
+    Weights:
+      type: object
+      description: Weight configuration for assessment (0-5 scale)
+      properties:
+        security:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Security and compliance weight
+          example: 4
+        cost:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Cost and ROI weight
+          example: 3
+        interoperability:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Interoperability and integrations weight
+          example: 5
+        adoption:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Adoption and support weight
+          example: 2
+
+    RequirementProfile:
+      type: object
+      description: Parsed requirements from use case (assessment only)
+      properties:
+        critical_requirements:
+          type: array
+          items:
+            type: string
+          example:
+            - SSO/SAML authentication
+            - REST API with webhooks
+            - GDPR compliance
+        nice_to_haves:
+          type: array
+          items:
+            type: string
+          example:
+            - Mobile app
+            - Advanced analytics
+        compliance_expectations:
+          type: array
+          items:
+            type: string
+          example:
+            - SOC2 Type II
+            - ISO 27001
+
+    Vendor:
+      type: object
+      required:
+        - id
+        - name
+        - website
+      properties:
+        id:
+          type: string
+          description: Vendor identifier
+          example: vendor-a
+        name:
+          type: string
+          description: Vendor name
+          example: Acme Corp
+        website:
+          type: string
+          format: uri
+          description: Vendor website
+          example: https://acme.com
+        contact_email:
+          type: string
+          format: email
+          nullable: true
+          description: Contact email
+          example: contact@acme.com
+        hq_location:
+          type: string
+          nullable: true
+          description: Headquarters location
+          example: Austin, TX
+        product_name:
+          type: string
+          nullable: true
+          description: Product name
+          example: Acme CRM
+        product_description:
+          type: string
+          nullable: true
+          description: Product description
+          example: Enterprise CRM solution
+        files:
+          type: array
+          description: Uploaded documents
+          items:
+            $ref: '#/components/schemas/FileInfo'
+        doc_urls:
+          type: array
+          description: Document URLs
+          items:
+            type: string
+            format: uri
+          example:
+            - https://acme.com/security
+            - https://acme.com/privacy
+        agent_outputs:
+          $ref: '#/components/schemas/AgentOutputs'
+        total_score:
+          type: number
+          format: float
+          nullable: true
+          description: Aggregate score across all dimensions
+          example: 4.1
+        progress:
+          type: string
+          nullable: true
+          description: Current pipeline progress
+          example: compliance_done
+
+    FileInfo:
+      type: object
+      required:
+        - name
+        - path
+        - mime_type
+      properties:
+        name:
+          type: string
+          description: Original filename
+          example: security-whitepaper.pdf
+        path:
+          type: string
+          description: Server file path
+          example: uploads/665f1c/vendor-a/security.pdf
+        mime_type:
+          type: string
+          description: MIME type
+          example: application/pdf
+
+    AgentOutputs:
+      type: object
+      description: Outputs from all AI agents
+      properties:
+        intake:
+          type: object
+          description: Intake agent output
+          properties:
+            summary:
+              type: string
+              example: Enterprise CRM vendor serving finance and retail sectors
+            fields:
+              type: object
+              properties:
+                regions_served:
+                  type: array
+                  items:
+                    type: string
+                  example: [US, EU]
+                industries:
+                  type: array
+                  items:
+                    type: string
+                  example: [Finance, Retail]
+                product_category:
+                  type: string
+                  example: CRM
+        verification:
+          type: object
+          description: Verification agent output
+          properties:
+            flags:
+              type: object
+              properties:
+                name_match:
+                  type: string
+                  enum: [match, mismatch, unknown]
+                  example: match
+                website_match:
+                  type: string
+                  enum: [match, mismatch, unknown]
+                  example: match
+                location_match:
+                  type: string
+                  enum: [match, mismatch, unknown]
+                  example: match
+        compliance:
+          type: object
+          description: Compliance agent output
+          properties:
+            score:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 5
+              example: 4.3
+            findings:
+              type: array
+              items:
+                type: string
+              example:
+                - Supports SOC2, ISO27001
+                - GDPR compliant
+            risks:
+              type: array
+              items:
+                type: string
+              example:
+                - No HIPAA coverage
+        interoperability:
+          type: object
+          description: Interoperability agent output
+          properties:
+            score:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 5
+              example: 3.8
+            findings:
+              type: array
+              items:
+                type: string
+              example:
+                - REST API available
+                - SAML SSO support
+                - Webhooks for events
+        finance:
+          type: object
+          description: Finance agent output
+          properties:
+            score:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 5
+              example: 3.5
+            tco_estimate:
+              type: string
+              example: Approx $40k/year for 200 seats
+            notes:
+              type: string
+              example: Tier-based pricing, volume discounts available
+        adoption:
+          type: object
+          description: Adoption & support agent output
+          properties:
+            score:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 5
+              example: 4.0
+            notes:
+              type: string
+              example: 24/7 support, comprehensive documentation, onboarding program
+
+    Recommendation:
+      type: object
+      required:
+        - vendor_id
+        - reason
+      properties:
+        vendor_id:
+          type: string
+          description: Recommended vendor ID
+          example: vendor-a
+        reason:
+          type: string
+          description: Justification for recommendation
+          example: Best weighted score; strongest security and interoperability
+
+    Error:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Error message
+          example: Evaluation not found
+

@@ -132,18 +132,28 @@ Frontend will run on `http://localhost:3000`
 - Use API client in `frontend/lib/api.ts`
 - Implement UI for results display
 
-## API Endpoints
+## API Documentation
 
-### Core API
+### Interactive Documentation
+Once the backend is running, access:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **API Info Page**: http://localhost:8000/
+- **OpenAPI Spec (YAML)**: http://localhost:8000/openapi.yaml
+- **OpenAPI Spec (JSON)**: http://localhost:8000/openapi.json
+
+### Core API Endpoints
 - `GET /api/health` - Health check
 - `POST /api/evaluations/apply` - Create vendor application
 - `POST /api/evaluations/assess` - Create vendor assessment
 - `GET /api/evaluations/{id}` - Get evaluation
 - `GET /api/evaluations` - List evaluations
 
-### Workflow API
+### Workflow API Endpoints
 - `POST /api/workflows/application/{id}/run` - Run application workflow
 - `POST /api/workflows/assessment/{id}/run` - Run assessment workflow
+
+See `backend/API_TESTING.md` for detailed testing examples.
 
 ## Environment Variables
 
@@ -154,6 +164,17 @@ See `.env.example` for required environment variables:
 - `NEMOTRON_API_KEY` - Nemotron API key
 - `UPLOAD_DIR` - Directory for file uploads
 - `NEXT_PUBLIC_API_URL` - Backend API URL for frontend
+
+## Development Rules
+
+**🎯 Using Cursor AI? Read `.cursorrules` and `DEVELOPMENT_RULES.md` first!**
+
+Key principles:
+- Keep solutions simple - avoid over-engineering
+- Follow DRY principles - reuse existing code
+- Stay within MVP scope - no feature creep
+- No hallucinations - only use code that exists
+- This is the ONLY README - no summary/overview docs
 
 ## Notes
 
