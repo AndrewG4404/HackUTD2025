@@ -152,6 +152,13 @@ Once the backend is running, access:
 ### Workflow API Endpoints
 - `POST /api/workflows/application/{id}/run` - Run application workflow
 - `POST /api/workflows/assessment/{id}/run` - Run assessment workflow
+- `GET /api/workflows/{id}/stream` - **Stream real-time agent progress (SSE)**
+
+### Real-Time Agent Visualization
+- `GET /api/workflows/{id}/stream` - Server-Sent Events endpoint that streams live agent progress
+  - Emits events as agents execute: `agent_start`, `agent_thinking`, `agent_complete`, `workflow_complete`
+  - Each event includes: agent name, status, reasoning, outputs, and timestamps
+  - Frontend displays live workflow visualization with agent-to-agent communication
 
 See `backend/API_TESTING.md` for detailed testing examples.
 
@@ -223,6 +230,19 @@ See `backend/LOCAL_NIM_SETUP.md` for detailed documentation.
 ## Agent Workflow (Teammate #2)
 
 ### ✅ Implemented Components
+
+**Real-Time Agent Visualization** 🎬
+- **Live workflow streaming** via Server-Sent Events (SSE)
+- **Visual agent-to-agent communication** - see agents reasoning and passing context
+- **Synchronous progress updates** - watch analysis happen in real-time
+- **Reasoning transparency** - view actual Nemotron model outputs and agent decisions
+- **Event stream includes:**
+  - Agent start/complete events with timestamps
+  - LLM reasoning outputs (actual prompts and responses)
+  - Context passing between agents (what each agent sends to the next)
+  - Document discoveries and web scraping progress
+  - Scoring decisions and findings extraction
+  - Final recommendations and reasoning
 
 **Nemotron Client** (`backend/services/nemotron_client.py`)
 - OpenAI-compatible client for NVIDIA Nemotron API
@@ -300,6 +320,87 @@ python backend/test_agent_workflow.py
 
 # Or test via API after starting the backend
 curl -X POST "http://localhost:8000/api/workflows/application/{evaluation_id}/run"
+
+# Watch real-time agent progress (SSE stream)
+curl -N -H "Accept: text/event-stream" \
+  "http://localhost:8000/api/workflows/{evaluation_id}/stream"
+```
+
+### 🎬 Real-Time Workflow Visualization
+
+The frontend displays a **live agentic workflow visualization** showing:
+
+1. **Agent Pipeline View**
+   - Sequential agent execution flow (Intake → Verification → Compliance → etc.)
+   - Current active agent highlighted with pulsing animation
+   - Completed agents show checkmarks with execution time
+   - Failed agents show error indicators
+
+2. **Agent Communication Panel**
+   - Live LLM reasoning outputs from Nemotron
+   - Context being passed between agents
+   - Document discoveries and analysis snippets
+   - Real-time score calculations and findings
+
+3. **Event Timeline**
+   - Chronological log of all agent activities
+   - Timestamps and durations for each step
+   - Expandable details for each event (prompts, responses, context)
+
+**For Judges**: Navigate to `/evaluations/{id}` immediately after starting a workflow to see the live visualization in action. The page will show agents reasoning, discovering documentation, and building the evaluation in real-time.
+
+### 🏗️ Implementation Architecture
+
+**Backend (Python/FastAPI):**
+- **SSE Endpoint**: `GET /api/workflows/{evaluation_id}/stream`
+  - Uses `fastapi.responses.StreamingResponse` with `text/event-stream` media type
+  - Yields SSE-formatted events during workflow execution
+  - Event format: `event: {type}\ndata: {json}\n\n`
+
+- **Agent Event Emitter**: Base class method for agents to emit events
+  - `emit_event(event_type, data)` - publishes event to SSE stream
+  - Called at key points: start, LLM calls, discoveries, completion
+  - Includes timestamps, agent name, role, and context
+
+- **Modified Pipeline**: Workflows stream events in real-time
+  - Before agent execution: emit `agent_start`
+  - During LLM calls: emit `agent_thinking` with prompt preview
+  - During processing: emit `agent_progress` for discoveries/analysis
+  - After agent execution: emit `agent_complete` with outputs
+  - At workflow end: emit `workflow_complete` with final results
+
+**Frontend (Next.js/React):**
+- **EventSource API**: Native browser SSE client
+  - Connects to `/api/workflows/{id}/stream` when evaluation page loads
+  - Listens for event types and updates UI state
+  - Automatically reconnects on connection loss
+
+- **Live Visualization Components**:
+  - `<AgentPipeline>` - Shows agent flow with current status
+  - `<AgentReasoningPanel>` - Displays live LLM outputs and context
+  - `<EventTimeline>` - Chronological log with expandable details
+
+- **State Management**: React state hooks for real-time updates
+  - Current active agent, completed agents, event history
+  - Auto-scrolling to latest event, pulsing animations
+  - Preserves events after workflow completion for review
+
+**Event Examples:**
+```typescript
+// agent_start
+{ agent_name: "ComplianceAgent", role: "Compliance Officer", timestamp: "..." }
+
+// agent_thinking
+{ agent_name: "ComplianceAgent", action: "Discovering privacy docs", 
+  prompt_preview: "Find privacy documentation for...", llm_model: "nemotron" }
+
+// agent_progress  
+{ agent_name: "ComplianceAgent", message: "Found 3 documentation URLs",
+  urls: ["https://vendor.com/privacy", ...], timestamp: "..." }
+
+// agent_complete
+{ agent_name: "ComplianceAgent", outputs: { score: 4.2, findings: [...] },
+  duration_ms: 5432, timestamp: "..." }
 ```
 
 ## Development Rules

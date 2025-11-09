@@ -308,6 +308,109 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/workflows/{evaluation_id}/stream:
+    get:
+      tags:
+        - Workflows
+      summary: Stream real-time agent progress (SSE)
+      description: |
+        **Server-Sent Events (SSE)** endpoint for real-time workflow visualization.
+        
+        Streams live agent progress events as the workflow executes, including:
+        - Agent start/complete events with timestamps
+        - LLM reasoning outputs (prompts and responses from Nemotron)
+        - Context passing between agents
+        - Document discoveries and web scraping progress
+        - Scoring decisions and findings extraction
+        - Final recommendations
+        
+        **Event Types:**
+        - `agent_start` - Agent begins execution
+        - `agent_thinking` - Agent is reasoning/calling LLM
+        - `agent_progress` - Intermediate progress updates (e.g., "Discovered 3 documentation URLs")
+        - `agent_complete` - Agent finished with outputs
+        - `workflow_complete` - Entire workflow finished
+        - `workflow_error` - Error occurred
+        
+        **Usage:**
+        ```javascript
+        const eventSource = new EventSource('/api/workflows/{id}/stream');
+        eventSource.addEventListener('agent_start', (e) => {
+          const data = JSON.parse(e.data);
+          console.log(`${data.agent_name} started at ${data.timestamp}`);
+        });
+        ```
+      operationId: streamWorkflowProgress
+      parameters:
+        - name: evaluation_id
+          in: path
+          required: true
+          description: Evaluation ID to stream progress for
+          schema:
+            type: string
+            example: 665f1d2a3b4d5e6f7a8b9c0e
+      responses:
+        '200':
+          description: Event stream connection established
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  Server-Sent Events stream. Each event is formatted as:
+                  ```
+                  event: agent_start
+                  data: {"agent_name": "IntakeAgent", "timestamp": "2025-01-01T12:00:00Z", ...}
+                  
+                  event: agent_thinking
+                  data: {"agent_name": "IntakeAgent", "prompt": "...", "reasoning": "..."}
+                  
+                  event: agent_complete
+                  data: {"agent_name": "IntakeAgent", "outputs": {...}, "duration_ms": 1234}
+                  ```
+              examples:
+                agent_start:
+                  summary: Agent starts execution
+                  value: |
+                    event: agent_start
+                    data: {"agent_name": "ComplianceAgent", "role": "Compliance Officer", "timestamp": "2025-01-01T12:00:00.000Z", "status": "starting"}
+                
+                agent_thinking:
+                  summary: Agent reasoning with LLM
+                  value: |
+                    event: agent_thinking
+                    data: {"agent_name": "ComplianceAgent", "action": "Discovering privacy documentation", "prompt_preview": "Find privacy and security documentation for...", "timestamp": "2025-01-01T12:00:01.500Z"}
+                
+                agent_progress:
+                  summary: Intermediate progress update
+                  value: |
+                    event: agent_progress
+                    data: {"agent_name": "ComplianceAgent", "message": "Discovered 3 documentation URLs", "urls": ["https://example.com/privacy", "https://example.com/security"], "timestamp": "2025-01-01T12:00:03.000Z"}
+                
+                agent_complete:
+                  summary: Agent completes with outputs
+                  value: |
+                    event: agent_complete
+                    data: {"agent_name": "ComplianceAgent", "status": "completed", "outputs": {"score": 4.2, "findings": ["GDPR compliant", "SOC2 certified"]}, "duration_ms": 5432, "timestamp": "2025-01-01T12:00:05.432Z"}
+                
+                workflow_complete:
+                  summary: Entire workflow finished
+                  value: |
+                    event: workflow_complete
+                    data: {"status": "completed", "total_duration_ms": 45123, "recommendation": {"vendor_id": "vendor-a", "reason": "Best overall fit"}, "timestamp": "2025-01-01T12:00:45.123Z"}
+        '404':
+          description: Evaluation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Invalid evaluation ID or workflow not running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 components:
   schemas:
     EvaluationCreateResponse:
