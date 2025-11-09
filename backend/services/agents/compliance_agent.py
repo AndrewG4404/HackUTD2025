@@ -81,16 +81,75 @@ class ComplianceAgent(BaseAgent):
         security_reqs = org_policy.get("security_needs", [])
         all_reqs = compliance_reqs + security_reqs
         
-        # Check which requirements are met based on findings
+        # Check which requirements are met based on findings AND source content
         normalized_findings = " ".join(findings).lower()
+        
+        # Also check source content directly as fallback (in case LLM didn't extract properly)
+        normalized_sources = " ".join([
+            s.get("content", "").lower()[:5000]  # First 5000 chars per source
+            for s in self.sources
+        ])
+        # Combine findings and sources for more comprehensive matching
+        combined_content = normalized_findings + " " + normalized_sources
+        
         requirements_alignment = {}
         unmet_requirements = []
         
+        # Common variations mapping for certifications and standards
+        variations_map = {
+            "soc 2 type ii": ["soc2", "soc 2", "soc2 type", "soc type ii", "soc 2 type 2", "soc 2 (type Ⅱ)"],
+            "sso/saml": ["sso", "saml", "saml 2.0", "single sign-on", "single sign on"],
+            "iso 27001": ["iso27001", "iso/iec 27001", "iso/iec27001", "iso 27001:2013"],
+            "gdpr": ["general data protection regulation", "eu gdpr"],
+            "mfa": ["multi-factor", "multifactor", "two-factor", "2fa", "two factor"],
+            "rbac": ["role-based", "role based", "role based access", "role-based access control"],
+            "dpa (data processing agreement)": ["dpa", "data processing agreement", "data processing addendum"],
+            "encryption at rest and in transit": ["encryption", "encrypted", "tls", "ssl", "aes-256", "encryption at rest", "encryption in transit"],
+            "audit logs": ["audit log", "audit logging", "audit trail", "audit trail logs"]
+        }
+        
         for req in all_reqs:
             req_lower = req.lower()
-            # Simple keyword matching - check if requirement terms appear in findings
-            req_keywords = req_lower.replace("(", "").replace(")", "").split()
-            matched = any(keyword in normalized_findings for keyword in req_keywords if len(keyword) > 3)
+            matched = False
+            
+            # Normalize common variations in requirement text
+            normalized_req = req_lower.replace("soc2", "soc 2").replace("type Ⅱ", "type ii").replace("type 2", "type ii")
+            
+            # Strategy 1: Handle "/" separator (e.g., "SSO/SAML")
+            if "/" in normalized_req:
+                parts = [p.strip() for p in normalized_req.split("/")]
+                # Check if any part appears in findings OR source content
+                matched = any(
+                    part in combined_content 
+                    for part in parts 
+                    if len(part) > 2
+                )
+            
+            # Strategy 2: Check variations map for known patterns
+            if not matched:
+                req_normalized = normalized_req.replace("(", "").replace(")", "").replace("/", " ").strip()
+                if req_normalized in variations_map:
+                    matched = any(var in combined_content for var in variations_map[req_normalized])
+            
+            # Strategy 3: Phrase matching for multi-word requirements
+            if not matched and len(normalized_req.split()) > 1:
+                # Remove special chars and split into meaningful parts
+                phrase = normalized_req.replace("(", "").replace(")", "").replace("/", " ").replace("-", " ")
+                key_parts = [p for p in phrase.split() if len(p) > 2]  # Get meaningful words (> 2 chars)
+                
+                if len(key_parts) >= 2:
+                    # Check if at least 2 key parts appear in findings OR source content
+                    matches = sum(1 for part in key_parts if part in combined_content)
+                    if matches >= min(2, len(key_parts)):  # At least 2 parts or all if < 2
+                        matched = True
+            
+            # Strategy 4: Individual keyword matching (lower threshold to catch acronyms)
+            if not matched:
+                req_keywords = normalized_req.replace("(", "").replace(")", "").replace("/", " ").split()
+                # Lower threshold to 2 chars to catch "SOC", "SSO", "MFA", "RBAC", etc.
+                meaningful_keywords = [kw for kw in req_keywords if len(kw) > 2]
+                if meaningful_keywords:
+                    matched = any(keyword in combined_content for keyword in meaningful_keywords)
             
             if matched:
                 requirements_alignment[req] = "met"
@@ -231,10 +290,15 @@ class ComplianceAgent(BaseAgent):
 
 {info[:3000]}
 
-Extract specific certifications found (SOC2 Type II, ISO27001, ISO27017, ISO27018, PCI-DSS, FedRAMP, etc.).
-List each certification found with a brief description.
+Extract specific certifications found. Use standard terminology:
+- "SOC 2 Type II" (not "SOC2" or "SOC2 Type 2")
+- "ISO 27001" (not "ISO27001")
+- "SSO" or "SAML" for authentication
+- "GDPR" for privacy compliance
 
-Return JSON: {{"certifications": ["cert1: description", "cert2: description", ...]}}
+List each certification found with a brief description. Include the exact certification name as it appears in the documentation.
+
+Return JSON: {{"certifications": ["SOC 2 Type II: description", "ISO 27001: description", ...]}}
 If no certifications found, return empty list.
 """
         
@@ -331,14 +395,15 @@ Return JSON: {{"data_handling_findings": ["finding1", "finding2", ...]}}
 
 {info[:3000]}
 
-Identify:
-1. SSO support (SAML, OAuth, SCIM)
+Identify and list each feature found. Use standard terminology:
+1. SSO support (mention "SSO" or "SAML" or "SAML 2.0" if found)
 2. Encryption (at rest, in transit)
-3. Audit logging capabilities
-4. Role-based access control (RBAC)
-5. Multi-factor authentication (MFA)
+3. Audit logging capabilities (mention "audit logs" or "audit logging")
+4. Role-based access control (mention "RBAC" or "role-based access")
+5. Multi-factor authentication (mention "MFA" or "multi-factor")
 
-Return JSON: {{"security_features": ["feature1", "feature2", ...]}}
+Return JSON: {{"security_features": ["SSO support via SAML 2.0", "Encryption at rest and in transit", ...]}}
+Be specific and include the exact terminology used in the documentation.
 """
         
         try:
