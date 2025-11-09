@@ -10,14 +10,16 @@ from typing import Dict, Any
 class IntakeAgent(BaseAgent):
     """Agent 1: Intake Agent"""
     
-    def __init__(self):
-        super().__init__("Intake Agent", "Vendor Ops Analyst")
+    def __init__(self, event_callback=None):
+        super().__init__("IntakeAgent", "Vendor Ops Analyst", event_callback)
     
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Normalize vendor fields and extract additional info.
         """
         vendor = context.get("vendor", {})
+        
+        self.emit_event("agent_start", {"status": "starting"})
         
         # Extract vendor basic info
         company_name = vendor.get("name", "Unknown")

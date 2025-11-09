@@ -9,8 +9,8 @@ from typing import Dict, Any
 class SummaryAgent(BaseAgent):
     """Agent 7: Summary Agent"""
     
-    def __init__(self):
-        super().__init__("Summary Agent", "Onboarding Manager")
+    def __init__(self, event_callback=None):
+        super().__init__("SummaryAgent", "Onboarding Manager", event_callback)
     
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
