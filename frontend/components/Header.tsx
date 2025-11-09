@@ -23,7 +23,7 @@ export default function Header() {
             <Link 
               href="/apply" 
               className={`
-                text-sm font-medium transition-colors duration-300
+                text-sm font-bold transition-colors duration-300
                 ${isActive('/apply') 
                   ? 'text-white border-b-2 border-blue-400 pb-1' 
                   : 'text-white/90 hover:text-white hover:border-b-2 hover:border-white/50 pb-1'
@@ -35,7 +35,7 @@ export default function Header() {
             <Link 
               href="/assess" 
               className={`
-                text-sm font-medium transition-colors duration-300
+                text-sm font-bold transition-colors duration-300
                 ${isActive('/assess') 
                   ? 'text-white border-b-2 border-cyan-400 pb-1' 
                   : 'text-white/90 hover:text-white hover:border-b-2 hover:border-white/50 pb-1'

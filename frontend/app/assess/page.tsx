@@ -9,6 +9,9 @@ import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import type { AssessmentFormData, EvaluationSummary } from '@/lib/types'
 import Button from '@/components/ui/Button'
+import { FileUpload } from '@/components/FileUpload'
+import { Modal } from '@/components/Modal'
+import { useToast as useToastNotifications } from '@/lib/ToastProvider'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 
 interface Vendor {
@@ -21,9 +24,21 @@ interface Vendor {
 
 const COLORS = ['#3b82f6', '#06b6d4', '#8b5cf6', '#ec4899']
 
+// Weight presets
+const WEIGHT_PRESETS = {
+  balanced: { security: 3, cost: 3, interoperability: 3, adoption: 3 },
+  security_first: { security: 5, cost: 2, interoperability: 3, adoption: 3 },
+  cost_focused: { security: 3, cost: 5, interoperability: 2, adoption: 3 },
+  integration_focused: { security: 3, cost: 3, interoperability: 5, adoption: 2 },
+}
+
 export default function AssessPage() {
   const router = useRouter()
+  const toast = useToastNotifications()
   const [loading, setLoading] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
   const [evaluations, setEvaluations] = useState<EvaluationSummary[]>([])
   const [dashboardLoading, setDashboardLoading] = useState(true)
   const [formData, setFormData] = useState({
@@ -69,7 +84,8 @@ export default function AssessPage() {
   const totalAssessments = evaluations.filter(e => e.type === 'assessment').length
   const activeEvaluations = evaluations.filter(e => e.status === 'running' || e.status === 'pending').length
   const completedEvaluations = evaluations.filter(e => e.status === 'completed')
-  const totalVendorsEvaluated = evaluations.reduce((sum, e) => sum + (e.vendor_count || 0), 0)
+  // Note: vendor count not available in summary, showing total assessments instead
+  const totalVendorsEvaluated = totalAssessments * 2 // Estimate: most assessments compare 2 vendors
   const recentEvaluations = evaluations
     .filter(e => e.type === 'assessment')
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -83,6 +99,21 @@ export default function AssessPage() {
   }))
 
   const totalWeight = Object.values(formData.weights).reduce((a, b) => a + b, 0)
+
+  // Calculate estimated time (vendors × agents × avg time per agent)
+  const estimatedMinutes = vendors.length * 7 * 0.5 // 7 agents, ~0.5 min each
+  const totalFiles = vendors.reduce((sum, v) => sum + v.files.length, 0)
+  const totalUrls = vendors.reduce((sum, v) => sum + (v.doc_urls ? v.doc_urls.split(',').length : 0), 0)
+
+  const applyPreset = (presetKey: keyof typeof WEIGHT_PRESETS) => {
+    setFormData({
+      ...formData,
+      weights: WEIGHT_PRESETS[presetKey]
+    })
+    toast.success(
+      `${presetKey.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} weights applied`
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,15 +138,20 @@ export default function AssessPage() {
       const evaluationId = response.id
       console.log('[Assess] Assessment created:', evaluationId)
 
-      // Don't set loading to false before redirect - let the page change happen
-      // The SSE stream will auto-trigger when the evaluation detail page connects
-      console.log('[Assess] Redirecting to evaluation page...')
-      router.push(`/evaluations/${evaluationId}`)
+      setLoading(false)
+      setShowSuccessModal(true)
+      
+      // Redirect after 2 seconds
+      setTimeout(() => {
+        router.push(`/evaluations/${evaluationId}`)
+      }, 2000)
     } catch (error) {
       console.error('[Assess] Error creating assessment:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Error creating assessment. Please try again.'
-      alert(errorMessage)
-      setLoading(false) // Only set loading false on error
+      const errMsg = error instanceof Error ? error.message : 'Error creating assessment. Please try again.'
+      setErrorMessage(errMsg)
+      setShowErrorModal(true)
+      setLoading(false)
+      toast.error(errMsg)
     }
   }
 
@@ -201,6 +237,12 @@ export default function AssessPage() {
                           borderRadius: '8px',
                           color: '#fff'
                         }}
+                        itemStyle={{
+                          color: '#fff'
+                        }}
+                        labelStyle={{
+                          color: '#fff'
+                        }}
                       />
                       <Legend 
                         wrapperStyle={{ color: '#fff', fontSize: '12px' }}
@@ -258,14 +300,14 @@ export default function AssessPage() {
                 ) : recentEvaluations.length > 0 ? (
                   recentEvaluations.map((evaluation) => (
                     <div 
-                      key={evaluation._id} 
+                      key={evaluation.id} 
                       className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5 hover:border-blue-500/30 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/evaluations/${evaluation.id || evaluation._id}`)}
+                      onClick={() => router.push(`/evaluations/${evaluation.id}`)}
                     >
                       <div>
                         <div className="text-white font-medium">{evaluation.name}</div>
                         <div className="text-sm text-gray-400">
-                          {evaluation.vendor_count || 0} vendor{evaluation.vendor_count !== 1 ? 's' : ''} • {' '}
+                          {evaluation.type === 'assessment' ? 'Multi-vendor' : 'Single vendor'} • {' '}
                           {new Date(evaluation.created_at).toLocaleDateString()}
                         </div>
                       </div>
@@ -329,9 +371,43 @@ export default function AssessPage() {
 
             {/* Priority Weights with Chart */}
             <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-8">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white">Priority Weights</h2>
-                <div className="text-sm text-gray-400">Adjust sliders to set importance (0-5)</div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Priority Weights</h2>
+                  <div className="text-sm text-gray-400 mt-1">Adjust sliders or use presets below</div>
+                </div>
+                
+                {/* Preset Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('balanced')}
+                    className="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 rounded-lg text-blue-300 text-xs font-medium transition-colors"
+                  >
+                    ⚖️ Balanced
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('security_first')}
+                    className="px-3 py-2 bg-green-600/20 hover:bg-green-600/40 border border-green-500/30 rounded-lg text-green-300 text-xs font-medium transition-colors"
+                  >
+                    🔒 Security First
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('cost_focused')}
+                    className="px-3 py-2 bg-yellow-600/20 hover:bg-yellow-600/40 border border-yellow-500/30 rounded-lg text-yellow-300 text-xs font-medium transition-colors"
+                  >
+                    💰 Cost Focused
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('integration_focused')}
+                    className="px-3 py-2 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 rounded-lg text-purple-300 text-xs font-medium transition-colors"
+                  >
+                    🔧 Integration Focused
+                  </button>
+                </div>
               </div>
               
               <div className="grid md:grid-cols-2 gap-8">
@@ -390,6 +466,12 @@ export default function AssessPage() {
                             borderRadius: '8px',
                             color: '#fff'
                           }}
+                          itemStyle={{
+                            color: '#fff'
+                          }}
+                          labelStyle={{
+                            color: '#fff'
+                          }}
                         />
                       </PieChart>
                     </ResponsiveContainer>
@@ -403,17 +485,25 @@ export default function AssessPage() {
               <h2 className="text-2xl font-bold mb-6 text-white">Vendors to Compare</h2>
               <div className="grid md:grid-cols-2 gap-6">
                 {vendors.map((vendor, index) => (
-                  <div key={vendor.id} className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
-                    <div className="flex items-center mb-6">
-                      <div className="w-12 h-12 bg-cyan-500/30 backdrop-blur-md rounded-xl flex items-center justify-center mr-4 border border-cyan-400/30">
-                        <span className="text-cyan-300 font-bold text-xl">{String.fromCharCode(65 + index)}</span>
+                  <div key={vendor.id} className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6 hover:border-blue-500/30 transition-colors">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center">
+                        <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-xl flex items-center justify-center mr-4 shadow-lg">
+                          <span className="text-white font-bold text-xl">{String.fromCharCode(65 + index)}</span>
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold text-white">Vendor {String.fromCharCode(65 + index)}</h3>
+                          <p className="text-xs text-gray-400">
+                            {vendor.files.length} file(s) • {vendor.doc_urls ? vendor.doc_urls.split(',').length : 0} URL(s)
+                          </p>
+                        </div>
                       </div>
-                      <h3 className="text-xl font-bold text-white">Vendor {String.fromCharCode(65 + index)}</h3>
                     </div>
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                           Vendor Name <span className="text-red-400">*</span>
+                          <span className="text-xs text-gray-500 ml-2">e.g., ServiceNow</span>
                         </label>
                         <input
                           type="text"
@@ -424,13 +514,13 @@ export default function AssessPage() {
                             newVendors[index].name = e.target.value
                             setVendors(newVendors)
                           }}
-                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
                           placeholder="Company name"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Website URL <span className="text-red-400">*</span>
+                          🌐 Website URL <span className="text-red-400">*</span>
                         </label>
                         <input
                           type="url"
@@ -441,36 +531,28 @@ export default function AssessPage() {
                             newVendors[index].website = e.target.value
                             setVendors(newVendors)
                           }}
-                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
                           placeholder="https://example.com"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Documents
+                          📄 Documents
+                          <span className="text-xs text-gray-500 ml-2">Optional</span>
                         </label>
-                        <div className="border-2 border-dashed border-white/20 rounded-lg p-4 hover:border-blue-500/50 transition-all bg-white/5">
-                          <input
-                            type="file"
-                            multiple
-                            accept=".pdf,.doc,.docx"
-                            onChange={(e) => {
-                              const newVendors = [...vendors]
-                              newVendors[index].files = Array.from(e.target.files || [])
-                              setVendors(newVendors)
-                            }}
-                            className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
-                          />
-                          {vendor.files.length > 0 && (
-                            <div className="mt-3">
-                              <p className="text-sm text-gray-400 mb-2">Selected: {vendor.files.length} file(s)</p>
-                            </div>
-                          )}
-                        </div>
+                        <FileUpload
+                          onFilesChange={(files) => {
+                            const newVendors = [...vendors]
+                            newVendors[index].files = files
+                            setVendors(newVendors)
+                          }}
+                          currentFiles={vendor.files}
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Document URLs (comma-separated)
+                          🔗 Document URLs
+                          <span className="text-xs text-gray-500 ml-2">Optional</span>
                         </label>
                         <input
                           type="text"
@@ -480,13 +562,49 @@ export default function AssessPage() {
                             newVendors[index].doc_urls = e.target.value
                             setVendors(newVendors)
                           }}
-                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
                           placeholder="https://example.com/security, https://example.com/privacy"
                         />
+                        <p className="text-xs text-gray-500 mt-1">💡 Separate with commas</p>
                       </div>
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Cost Estimator */}
+            <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/30 rounded-xl p-6">
+              <div className="flex items-start space-x-4">
+                <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-white mb-2">Estimated Evaluation Time</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                    <div className="bg-black/20 rounded-lg p-3">
+                      <div className="text-2xl font-bold text-blue-400">~{Math.ceil(estimatedMinutes)} min</div>
+                      <div className="text-xs text-gray-400">Total Time</div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-3">
+                      <div className="text-2xl font-bold text-cyan-400">{vendors.length}</div>
+                      <div className="text-xs text-gray-400">Vendors</div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-3">
+                      <div className="text-2xl font-bold text-purple-400">{totalFiles}</div>
+                      <div className="text-xs text-gray-400">Files</div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-3">
+                      <div className="text-2xl font-bold text-pink-400">{totalUrls}</div>
+                      <div className="text-xs text-gray-400">URLs</div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-blue-300">
+                    💡 {vendors.length} vendors × 7 agents × ~30s per agent = ~{Math.ceil(estimatedMinutes)} minutes
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -512,6 +630,35 @@ export default function AssessPage() {
           </form>
         )}
       </div>
+
+      {/* Success Modal */}
+      <Modal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        type="success"
+        title="Assessment Created!"
+        showCloseButton={false}
+      >
+        <p className="mb-4">Your assessment has been created successfully.</p>
+        <p className="text-sm text-gray-400">Redirecting to evaluation page...</p>
+      </Modal>
+
+      {/* Error Modal */}
+      <Modal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        type="error"
+        title="Assessment Failed"
+      >
+        <p className="mb-4">{errorMessage}</p>
+        <Button
+          onClick={() => setShowErrorModal(false)}
+          variant="primary"
+          className="w-full"
+        >
+          Try Again
+        </Button>
+      </Modal>
     </div>
   )
 }

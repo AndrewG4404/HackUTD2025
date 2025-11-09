@@ -9,13 +9,27 @@ import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import type { ApplicationFormData } from '@/lib/types'
 import Button from '@/components/ui/Button'
+import { useToast } from '@/lib/ToastProvider'
+import { FileUpload } from '@/components/FileUpload'
+import { Modal } from '@/components/Modal'
 
-type Step = 1 | 2 | 3
+type Step = 1 | 2 | 3 | 4
+
+interface FieldValidation {
+  [key: string]: {
+    isValid: boolean
+    message?: string
+  }
+}
 
 export default function ApplyPage() {
   const router = useRouter()
+  const toast = useToast()
   const [currentStep, setCurrentStep] = useState<Step>(1)
   const [loading, setLoading] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     website: '',
@@ -26,6 +40,56 @@ export default function ApplyPage() {
     doc_urls: ''
   })
   const [files, setFiles] = useState<File[]>([])
+  const [validation, setValidation] = useState<FieldValidation>({})
+
+  // Validation functions
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
+  const validateUrl = (url: string): boolean => {
+    try {
+      new URL(url)
+      return url.startsWith('http://') || url.startsWith('https://')
+    } catch {
+      return false
+    }
+  }
+
+  const validateField = (field: string, value: string) => {
+    let isValid = true
+    let message = ''
+
+    switch (field) {
+      case 'contact_email':
+        isValid = validateEmail(value)
+        message = isValid ? '' : 'Please enter a valid email address'
+        break
+      case 'website':
+        isValid = value ? validateUrl(value) : true
+        message = isValid ? '' : 'Please enter a valid URL (starting with http:// or https://)'
+        break
+      case 'name':
+        isValid = value.length > 0
+        message = isValid ? '' : 'Company name is required'
+        break
+    }
+
+    setValidation(prev => ({
+      ...prev,
+      [field]: { isValid, message }
+    }))
+
+    return isValid
+  }
+
+  const handleFieldChange = (field: string, value: string) => {
+    setFormData({ ...formData, [field]: value })
+    if (value) {
+      validateField(field, value)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -48,19 +112,27 @@ export default function ApplyPage() {
       const evaluationId = response.id
       console.log('[Apply] Application created:', evaluationId)
 
-      // Don't set loading to false before redirect - let the page change happen
-      // The SSE stream will auto-trigger when the evaluation detail page connects
-      console.log('[Apply] Redirecting to evaluation page...')
-      router.push(`/evaluations/${evaluationId}`)
+      setLoading(false)
+      setShowSuccessModal(true)
+      
+      // Redirect after 2 seconds
+      setTimeout(() => {
+        router.push(`/evaluations/${evaluationId}`)
+      }, 2000)
     } catch (error) {
       console.error('[Apply] Error submitting application:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Error submitting application. Please try again.'
-      alert(errorMessage)
-      setLoading(false) // Only set loading false on error
+      const errMsg = error instanceof Error ? error.message : 'Error submitting application. Please try again.'
+      setErrorMessage(errMsg)
+      setShowErrorModal(true)
+      setLoading(false)
+      toast.error(errMsg)
     }
   }
 
-  const canProceedStep1 = formData.name && formData.website && formData.contact_email
+  const canProceedStep1 = formData.name && formData.website && formData.contact_email && 
+    validation.name?.isValid !== false && 
+    validation.website?.isValid !== false && 
+    validation.contact_email?.isValid !== false
   const canProceedStep2 = true // Step 2 is optional fields
   const canSubmit = canProceedStep1
 
@@ -68,7 +140,11 @@ export default function ApplyPage() {
     { number: 1, title: 'Company Information', current: currentStep === 1 },
     { number: 2, title: 'Product Details', current: currentStep === 2 },
     { number: 3, title: 'Documents', current: currentStep === 3 },
+    { number: 4, title: 'Review & Submit', current: currentStep === 4 },
   ]
+
+  const progressPercentage = (currentStep / steps.length) * 100
+  const estimatedTimeRemaining = Math.max(0, (steps.length - currentStep) * 1) // 1 min per step
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] py-12">
@@ -81,14 +157,30 @@ export default function ApplyPage() {
           <p className="text-xl text-gray-400 max-w-2xl mx-auto">
             Let's get your company onboarded with Goldman Sachs. This will only take a few minutes.
           </p>
+          
+          {/* Progress Indicator */}
+          <div className="mt-6 max-w-md mx-auto">
+            <div className="flex justify-between text-sm text-gray-400 mb-2">
+              <span>{progressPercentage.toFixed(0)}% Complete</span>
+              <span>~{estimatedTimeRemaining} min remaining</span>
+            </div>
+            <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-500 ease-out"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Progress Steps */}
         <div className="mb-12">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-start justify-center gap-4">
             {steps.map((step, index) => (
-              <div key={step.number} className="flex items-center flex-1">
-                <div className="flex flex-col items-center flex-1">
+              <div key={step.number} className="flex items-center">
+                {/* Step Container */}
+                <div className="flex flex-col items-center" style={{ width: '140px' }}>
+                  {/* Circle */}
                   <div className={`
                     w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all
                     ${step.current 
@@ -106,12 +198,18 @@ export default function ApplyPage() {
                       step.number
                     )}
                   </div>
-                  <p className={`mt-3 text-sm font-medium ${step.current ? 'text-white' : 'text-gray-500'}`}>
+                  {/* Label */}
+                  <p className={`mt-3 text-sm font-medium text-center ${step.current ? 'text-white' : 'text-gray-500'}`}>
                     {step.title}
                   </p>
                 </div>
+                
+                {/* Connecting Line */}
                 {index < steps.length - 1 && (
-                  <div className={`flex-1 h-1 mx-4 ${currentStep > step.number ? 'bg-green-600' : 'bg-gray-700'}`} />
+                  <div 
+                    className={`h-1 transition-all ${currentStep > step.number ? 'bg-green-600' : 'bg-gray-700'}`}
+                    style={{ width: '80px', marginBottom: '50px' }}
+                  />
                 )}
               </div>
             ))}
@@ -130,57 +228,102 @@ export default function ApplyPage() {
                 </div>
 
                 <div className="space-y-5">
+                  {/* Company Name */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Company Name <span className="text-red-400">*</span>
+                      <span className="text-xs text-gray-500 ml-2">e.g., ServiceNow, Salesforce</span>
                     </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      placeholder="Enter your company name"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={formData.name}
+                        onChange={(e) => handleFieldChange('name', e.target.value)}
+                        onBlur={(e) => validateField('name', e.target.value)}
+                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all pr-10"
+                        placeholder="Enter your company name"
+                      />
+                      {validation.name?.isValid && formData.name && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <svg className="w-5 h-5 text-green-400 animate-checkmark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    {validation.name?.message && (
+                      <p className="text-red-400 text-xs mt-1">{validation.name.message}</p>
+                    )}
                   </div>
 
+                  {/* Website URL */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Website URL <span className="text-red-400">*</span>
                     </label>
-                    <input
-                      type="url"
-                      required
-                      value={formData.website}
-                      onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      placeholder="https://yourcompany.com"
-                    />
+                    <div className="relative">
+                      <input
+                        type="url"
+                        required
+                        value={formData.website}
+                        onChange={(e) => handleFieldChange('website', e.target.value)}
+                        onBlur={(e) => validateField('website', e.target.value)}
+                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all pr-10"
+                        placeholder="https://yourcompany.com"
+                      />
+                      {validation.website?.isValid && formData.website && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <svg className="w-5 h-5 text-green-400 animate-checkmark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    {validation.website?.message && (
+                      <p className="text-red-400 text-xs mt-1">{validation.website.message}</p>
+                    )}
                   </div>
 
+                  {/* Contact Email */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Contact Email <span className="text-red-400">*</span>
                     </label>
-                    <input
-                      type="email"
-                      required
-                      value={formData.contact_email}
-                      onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      placeholder="contact@yourcompany.com"
-                    />
+                    <div className="relative">
+                      <input
+                        type="email"
+                        required
+                        value={formData.contact_email}
+                        onChange={(e) => handleFieldChange('contact_email', e.target.value)}
+                        onBlur={(e) => validateField('contact_email', e.target.value)}
+                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all pr-10"
+                        placeholder="contact@yourcompany.com"
+                      />
+                      {validation.contact_email?.isValid && formData.contact_email && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <svg className="w-5 h-5 text-green-400 animate-checkmark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    {validation.contact_email?.message && (
+                      <p className="text-red-400 text-xs mt-1">{validation.contact_email.message}</p>
+                    )}
                   </div>
 
+                  {/* HQ Location */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Headquarters Location
+                      <span className="text-xs text-gray-500 ml-2">Optional</span>
                     </label>
                     <input
                       type="text"
                       value={formData.hq_location}
                       onChange={(e) => setFormData({ ...formData, hq_location: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
                       placeholder="City, Country (optional)"
                     />
                   </div>
@@ -267,64 +410,27 @@ export default function ApplyPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-3">
                       Upload Documents
+                      <span className="text-xs text-gray-500 ml-2">Optional but recommended</span>
                     </label>
-                    <div className="border-2 border-dashed border-white/20 rounded-xl p-8 hover:border-blue-500/50 transition-all bg-white/5">
-                      <div className="text-center">
-                        <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                        <input
-                          type="file"
-                          multiple
-                          accept=".pdf,.doc,.docx"
-                          onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                          className="hidden"
-                          id="file-upload"
-                        />
-                        <label
-                          htmlFor="file-upload"
-                          className="cursor-pointer inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                        >
-                          Choose Files
-                        </label>
-                        <p className="text-sm text-gray-400 mt-2">PDF, DOC, or DOCX files</p>
-                      </div>
-                      {files.length > 0 && (
-                        <div className="mt-6 pt-6 border-t border-white/10">
-                          <p className="text-sm text-gray-400 mb-3">Selected files:</p>
-                          <div className="space-y-2">
-                            {files.map((file, idx) => (
-                              <div key={idx} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
-                                <span className="text-white text-sm">{file.name}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setFiles(files.filter((_, i) => i !== idx))}
-                                  className="text-red-400 hover:text-red-300"
-                                >
-                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <FileUpload 
+                      onFilesChange={setFiles}
+                      currentFiles={files}
+                    />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Document URLs (optional)
+                      Document URLs
+                      <span className="text-xs text-gray-500 ml-2">Optional</span>
                     </label>
                     <input
                       type="text"
                       value={formData.doc_urls}
                       onChange={(e) => setFormData({ ...formData, doc_urls: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
                       placeholder="https://example.com/security, https://example.com/privacy"
                     />
-                    <p className="text-xs text-gray-500 mt-2">Separate multiple URLs with commas</p>
+                    <p className="text-xs text-gray-500 mt-2">💡 Separate multiple URLs with commas</p>
                   </div>
                 </div>
 
@@ -333,6 +439,132 @@ export default function ApplyPage() {
                     type="button"
                     variant="outline"
                     onClick={() => setCurrentStep(2)}
+                    className="px-8"
+                  >
+                    ← Back
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => setCurrentStep(4)}
+                    className="px-8"
+                  >
+                    Continue to Review →
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Review & Submit */}
+            {currentStep === 4 && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-white mb-2">Review Your Application</h2>
+                  <p className="text-gray-400">Please review your information before submitting</p>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Company Info Review */}
+                  <div className="bg-black/30 rounded-xl p-6 border border-white/10">
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="text-lg font-semibold text-white">Company Information</h3>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep(1)}
+                        className="text-blue-400 hover:text-blue-300 text-sm"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                    <div className="space-y-2 text-gray-300 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Company Name:</span>
+                        <span className="font-medium">{formData.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Website:</span>
+                        <span className="font-medium">{formData.website}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Contact Email:</span>
+                        <span className="font-medium">{formData.contact_email}</span>
+                      </div>
+                      {formData.hq_location && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Headquarters:</span>
+                          <span className="font-medium">{formData.hq_location}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Product Info Review */}
+                  {(formData.product_name || formData.product_description) && (
+                    <div className="bg-black/30 rounded-xl p-6 border border-white/10">
+                      <div className="flex justify-between items-start mb-4">
+                        <h3 className="text-lg font-semibold text-white">Product Information</h3>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentStep(2)}
+                          className="text-blue-400 hover:text-blue-300 text-sm"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                      <div className="space-y-2 text-gray-300 text-sm">
+                        {formData.product_name && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Product Name:</span>
+                            <span className="font-medium">{formData.product_name}</span>
+                          </div>
+                        )}
+                        {formData.product_description && (
+                          <div>
+                            <span className="text-gray-400 block mb-1">Description:</span>
+                            <p className="text-gray-300">{formData.product_description}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Documents Review */}
+                  <div className="bg-black/30 rounded-xl p-6 border border-white/10">
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="text-lg font-semibold text-white">Documents</h3>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep(3)}
+                        className="text-blue-400 hover:text-blue-300 text-sm"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                    <div className="space-y-2 text-gray-300 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Files Uploaded:</span>
+                        <span className="font-medium">{files.length} file(s)</span>
+                      </div>
+                      {formData.doc_urls && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Document URLs:</span>
+                          <span className="font-medium">{formData.doc_urls.split(',').length} URL(s)</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mt-6">
+                  <p className="text-blue-300 text-sm">
+                    ℹ️ Once submitted, our AI agents will begin evaluating your application. This typically takes 5-8 minutes.
+                  </p>
+                </div>
+
+                <div className="flex justify-between pt-6">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCurrentStep(3)}
                     className="px-8"
                   >
                     ← Back
@@ -351,7 +583,7 @@ export default function ApplyPage() {
                         Submitting...
                       </span>
                     ) : (
-                      'Submit Application ✓'
+                      '🚀 Submit Application'
                     )}
                   </Button>
                 </div>
@@ -360,6 +592,35 @@ export default function ApplyPage() {
           </form>
         </div>
       </div>
+
+      {/* Success Modal */}
+      <Modal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        type="success"
+        title="Application Submitted!"
+        showCloseButton={false}
+      >
+        <p className="mb-4">Your application has been submitted successfully.</p>
+        <p className="text-sm text-gray-400">Redirecting to evaluation page...</p>
+      </Modal>
+
+      {/* Error Modal */}
+      <Modal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        type="error"
+        title="Submission Failed"
+      >
+        <p className="mb-4">{errorMessage}</p>
+        <Button
+          onClick={() => setShowErrorModal(false)}
+          variant="primary"
+          className="w-full"
+        >
+          Try Again
+        </Button>
+      </Modal>
     </div>
   )
 }
