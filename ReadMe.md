@@ -229,7 +229,9 @@ See `backend/LOCAL_NIM_SETUP.md` for detailed documentation.
 - **Supports both cloud API and local NIM deployment**
 - Automatically detects endpoint from `NEMOTRON_API_URL`
 - Chat completion with JSON support
-- Web scraping for URL fetching
+- **Intelligent documentation discovery** - LLM-powered URL discovery
+- Web scraping with content extraction
+- Automatic fallback to common documentation patterns
 
 **Document Processor** (`backend/services/document_processor.py`)
 - PDF text extraction with PyPDF2
@@ -237,24 +239,64 @@ See `backend/LOCAL_NIM_SETUP.md` for detailed documentation.
 - Text chunking utilities
 
 **7 Specialized Agents** (`backend/services/agents/`)
-1. **IntakeAgent** - Normalizes vendor data
-2. **VerificationAgent** - Fact-checks against website
+
+All agents now feature **intelligent documentation discovery and analysis**:
+
+1. **IntakeAgent** - Normalizes vendor data and extracts basic info
+2. **VerificationAgent** - Fact-checks claims against official website
 3. **ComplianceAgent** - Evaluates compliance with RAG
+   - Automatically discovers privacy/security documentation
+   - Analyzes data ownership, retention, usage policies
+   - Checks GDPR, CCPA, HIPAA, SOC2, ISO27001 compliance
 4. **InteroperabilityAgent** - Assesses technical fit
+   - Discovers and analyzes API/technical documentation
+   - Evaluates REST, GraphQL, SSO, webhooks, SDKs
+   - Estimates integration complexity and dev effort
 5. **FinanceAgent** - Analyzes pricing and TCO
+   - Discovers official pricing documentation
+   - Evaluates pricing models, hidden costs, ROI
+   - Estimates TCO for 200-user deployment
 6. **AdoptionAgent** - Evaluates support capabilities
-7. **SummaryAgent** - Aggregates and recommends
+   - Discovers support and training documentation
+   - Assesses implementation timeline, SLAs, support channels
+   - Evaluates training resources and adoption complexity
+7. **SummaryAgent** - Aggregates results and provides final recommendation
 
 **Application Pipeline** (`backend/services/workflows/application_pipeline.py`)
 - Sequential agent orchestration (ReAct pattern)
 - Progress tracking and error handling
 - MongoDB integration
 
+### 🔍 Key Features - Intelligent RAG on Live Documentation
+
+Each agent now **automatically discovers and analyzes official vendor documentation**:
+
+1. **Documentation Discovery**: LLM intelligently finds relevant docs (privacy, pricing, API, support)
+2. **Live Web Scraping**: Fetches and analyzes current official documentation
+3. **RAG-Enhanced Analysis**: Retrieves relevant context from discovered docs
+4. **Comprehensive Evaluation**: Enterprise-grade compliance and technical assessments
+
+**Example workflow:**
+- User provides: `company_name="ServiceNow"`, `website="https://servicenow.com"`
+- Compliance Agent:
+  - Discovers: `/privacy-policy`, `/trust`, `/security`
+  - Fetches and analyzes official documentation
+  - Performs GDPR, SOC2, data retention analysis
+- Finance Agent:
+  - Discovers: `/pricing`, `/plans`
+  - Analyzes pricing models and TCO
+- Interoperability Agent:
+  - Discovers: `/developers`, `/api-docs`
+  - Evaluates REST API, SSO, webhooks
+
 ### 🧪 Testing
 
 ```bash
 # Test the agent workflow
 python backend/test_agent_workflow.py
+
+# Test with a real vendor (e.g., ServiceNow, Salesforce)
+# Agents will automatically discover and analyze their documentation!
 
 # Or test via API after starting the backend
 curl -X POST "http://localhost:8000/api/workflows/application/{evaluation_id}/run"

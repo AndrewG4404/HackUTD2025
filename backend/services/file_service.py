@@ -35,7 +35,9 @@ async def save_uploaded_files(
     eval_dir.mkdir(parents=True, exist_ok=True)
     
     for file in files:
-        if file.size > MAX_FILE_SIZE:
+        # Read content first to check size (UploadFile has no .size attribute)
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE:
             raise ValueError(f"File {file.filename} exceeds maximum size")
         
         # Generate unique filename
@@ -45,7 +47,6 @@ async def save_uploaded_files(
         
         # Save file
         async with aiofiles.open(file_path, 'wb') as f:
-            content = await file.read()
             await f.write(content)
         
         saved_files.append({

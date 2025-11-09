@@ -129,14 +129,85 @@ export default function EvaluationPage() {
         {isCompleted && (
           <div className="space-y-8">
             {evaluation.type === 'application' && (
-              <Card>
-                <h2 className="text-2xl font-semibold mb-6 text-white">Application Results</h2>
-                {/* TODO: Render vendor profile, dimension scores, verification flags, checklist */}
-                <div className="text-gray-400">
-                  <p>Results will be displayed here</p>
-                  <p className="text-sm text-gray-500 mt-2">Vendor profile, dimension scores, verification flags, and onboarding checklist will appear here once the backend is fully implemented.</p>
-                </div>
-              </Card>
+              <>
+                {evaluation.vendors?.[0]?.agent_outputs && (
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <Card>
+                      <h3 className="text-xl font-semibold mb-4 text-white">Dimension Scores</h3>
+                      <ul className="text-gray-300 space-y-3">
+                        <li className="flex justify-between items-center">
+                          <span>Compliance & Security:</span>
+                          <span className="font-semibold text-blue-400">
+                            {evaluation.vendors[0].agent_outputs?.compliance?.score?.toFixed(1) ?? '—'}/5.0
+                          </span>
+                        </li>
+                        <li className="flex justify-between items-center">
+                          <span>Technical Interoperability:</span>
+                          <span className="font-semibold text-blue-400">
+                            {evaluation.vendors[0].agent_outputs?.interoperability?.score?.toFixed(1) ?? '—'}/5.0
+                          </span>
+                        </li>
+                        <li className="flex justify-between items-center">
+                          <span>Finance & TCO:</span>
+                          <span className="font-semibold text-blue-400">
+                            {evaluation.vendors[0].agent_outputs?.finance?.score?.toFixed(1) ?? '—'}/5.0
+                          </span>
+                        </li>
+                        <li className="flex justify-between items-center">
+                          <span>Adoption & Support:</span>
+                          <span className="font-semibold text-blue-400">
+                            {evaluation.vendors[0].agent_outputs?.adoption?.score?.toFixed(1) ?? '—'}/5.0
+                          </span>
+                        </li>
+                        <li className="flex justify-between items-center pt-3 mt-3 border-t border-gray-700">
+                          <span className="font-semibold">Overall Score:</span>
+                          <span className="font-bold text-xl text-green-400">
+                            {evaluation.vendors[0].total_score?.toFixed(1) ?? '—'}/5.0
+                          </span>
+                        </li>
+                      </ul>
+                    </Card>
+                    <Card>
+                      <h3 className="text-xl font-semibold mb-4 text-white">Key Findings</h3>
+                      <div className="text-gray-300 space-y-3 text-sm">
+                        <div>
+                          <p className="text-gray-400 font-medium mb-1">🔒 Compliance:</p>
+                          <p className="text-gray-300">
+                            {(evaluation.vendors[0].agent_outputs?.compliance?.findings || []).slice(0, 2).join('; ') || 'No findings available'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 font-medium mb-1">🔧 Integration:</p>
+                          <p className="text-gray-300">
+                            {(evaluation.vendors[0].agent_outputs?.interoperability?.findings || []).slice(0, 2).join('; ') || 'No findings available'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 font-medium mb-1">💰 Finance:</p>
+                          <p className="text-gray-300">
+                            {evaluation.vendors[0].agent_outputs?.finance?.notes || 'No notes available'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 font-medium mb-1">🚀 Support:</p>
+                          <p className="text-gray-300">
+                            {evaluation.vendors[0].agent_outputs?.adoption?.notes || 'No notes available'}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+                )}
+                
+                {evaluation.recommendation && (
+                  <Card>
+                    <h3 className="text-xl font-semibold mb-4 text-white">Recommendation</h3>
+                    <div className="bg-[#0f0f0f] rounded-lg p-4 border border-blue-500/20">
+                      <p className="text-gray-300">{evaluation.recommendation.reason || 'Evaluation completed'}</p>
+                    </div>
+                  </Card>
+                )}
+              </>
             )}
 
             {evaluation.type === 'assessment' && (
@@ -150,7 +221,7 @@ export default function EvaluationPage() {
                         </svg>
                       </div>
                       <div>
-                        <h2 className="text-xl font-semibold text-green-400">Recommended Vendor</h2>
+                        <h2 className="text-xl font-semibold text-green-400">Recommended: {evaluation.recommendation.vendor_id}</h2>
                         <p className="text-sm text-gray-400">AI-powered recommendation</p>
                       </div>
                     </div>
@@ -161,12 +232,60 @@ export default function EvaluationPage() {
                 )}
 
                 <Card>
-                  <h2 className="text-2xl font-semibold mb-6 text-white">Comparison Results</h2>
-                  {/* TODO: Render comparison table and radar chart */}
-                  <div className="text-gray-400">
-                    <p>Comparison results will be displayed here</p>
-                    <p className="text-sm text-gray-500 mt-2">Comparison table and radar chart will appear here once the backend is fully implemented.</p>
-                  </div>
+                  <h2 className="text-2xl font-semibold mb-6 text-white">Vendor Comparison</h2>
+                  {evaluation.vendors && evaluation.vendors.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-gray-700">
+                            <th className="pb-3 text-gray-400 font-medium">Vendor</th>
+                            <th className="pb-3 text-gray-400 font-medium text-center">Compliance</th>
+                            <th className="pb-3 text-gray-400 font-medium text-center">Technical</th>
+                            <th className="pb-3 text-gray-400 font-medium text-center">Finance</th>
+                            <th className="pb-3 text-gray-400 font-medium text-center">Support</th>
+                            <th className="pb-3 text-gray-400 font-medium text-center">Overall</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {evaluation.vendors.map((vendor: any, idx: number) => (
+                            <tr key={idx} className="border-b border-gray-800">
+                              <td className="py-4">
+                                <div>
+                                  <p className="font-medium text-white">{vendor.name}</p>
+                                  <p className="text-sm text-gray-500">{vendor.website}</p>
+                                </div>
+                              </td>
+                              <td className="py-4 text-center text-gray-300">
+                                {vendor.agent_outputs?.compliance?.score?.toFixed(1) ?? '—'}
+                              </td>
+                              <td className="py-4 text-center text-gray-300">
+                                {vendor.agent_outputs?.interoperability?.score?.toFixed(1) ?? '—'}
+                              </td>
+                              <td className="py-4 text-center text-gray-300">
+                                {vendor.agent_outputs?.finance?.score?.toFixed(1) ?? '—'}
+                              </td>
+                              <td className="py-4 text-center text-gray-300">
+                                {vendor.agent_outputs?.adoption?.score?.toFixed(1) ?? '—'}
+                              </td>
+                              <td className="py-4 text-center">
+                                <span className={`font-bold text-lg ${
+                                  vendor.id === evaluation.recommendation?.vendor_id 
+                                    ? 'text-green-400' 
+                                    : 'text-gray-300'
+                                }`}>
+                                  {vendor.total_score?.toFixed(1) ?? '—'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-gray-400">
+                      <p>No vendor comparison data available</p>
+                    </div>
+                  )}
                 </Card>
               </div>
             )}

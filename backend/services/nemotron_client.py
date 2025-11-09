@@ -93,12 +93,13 @@ class NemotronClient:
         
         return self.chat_completion(modified_messages, temperature, max_tokens)
     
-    def fetch_url(self, url: str) -> str:
+    def fetch_url(self, url: str, max_chars: int = 10000) -> str:
         """
         Fetch and extract text content from a URL.
         
         Args:
             url: URL to fetch
+            max_chars: Maximum characters to return
         
         Returns:
             Extracted text content
@@ -111,7 +112,7 @@ class NemotronClient:
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Remove script and style elements
-            for script in soup(["script", "style"]):
+            for script in soup(["script", "style", "nav", "footer", "header"]):
                 script.decompose()
             
             # Get text
@@ -122,10 +123,87 @@ class NemotronClient:
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
             text = ' '.join(chunk for chunk in chunks if chunk)
             
-            return text[:10000]  # Limit to first 10k chars for MVP
+            return text[:max_chars]
         except Exception as e:
             print(f"Error fetching URL {url}: {e}")
             return f"Error fetching URL: {str(e)}"
+    
+    def discover_documentation_urls(self, base_website: str, doc_type: str) -> List[str]:
+        """
+        Discover relevant documentation URLs for a vendor.
+        Uses LLM to intelligently find documentation links.
+        
+        Args:
+            base_website: Vendor's main website URL
+            doc_type: Type of documentation to find (e.g., "privacy", "pricing", "api", "support")
+        
+        Returns:
+            List of discovered documentation URLs
+        """
+        try:
+            # Fetch main website
+            main_content = self.fetch_url(base_website, max_chars=5000)
+            
+            # Use LLM to extract relevant documentation URLs
+            prompt = f"""Given the website content below, find and list URLs related to "{doc_type}" documentation.
+            
+Website: {base_website}
+Content snippet: {main_content[:2000]}
+
+Common patterns for {doc_type} documentation:
+- Privacy: /privacy, /privacy-policy, /legal/privacy, /data-protection
+- Pricing: /pricing, /plans, /cost, /pricing-plans
+- API/Technical: /docs, /api, /developers, /documentation, /integration
+- Support: /support, /help, /resources, /training, /getting-started
+- Compliance: /security, /compliance, /certifications, /trust
+
+Return a JSON array of 2-5 most likely URLs for {doc_type} documentation:
+{{"urls": ["full_url_1", "full_url_2", ...]}}
+
+If the base website is https://example.com and you find /pricing, return https://example.com/pricing"""
+            
+            messages = [
+                {"role": "system", "content": "You are a web documentation discovery assistant. Return valid JSON only."},
+                {"role": "user", "content": prompt}
+            ]
+            
+            response = self.chat_completion_json(messages, temperature=0.3, max_tokens=500)
+            
+            # Parse response
+            import json
+            if isinstance(response, str):
+                result = json.loads(response)
+            else:
+                result = response
+            
+            urls = result.get("urls", [])
+            
+            # Fallback: construct common paths if LLM didn't return anything
+            if not urls:
+                urls = self._get_fallback_urls(base_website, doc_type)
+            
+            print(f"[NemotronClient] Discovered {len(urls)} URLs for {doc_type} documentation")
+            return urls[:5]  # Limit to 5 URLs
+            
+        except Exception as e:
+            print(f"[NemotronClient] Error discovering URLs: {e}")
+            return self._get_fallback_urls(base_website, doc_type)
+    
+    def _get_fallback_urls(self, base_website: str, doc_type: str) -> List[str]:
+        """Generate fallback documentation URLs based on common patterns."""
+        from urllib.parse import urljoin
+        
+        patterns = {
+            "privacy": ["/privacy-policy", "/privacy", "/legal/privacy", "/data-protection"],
+            "pricing": ["/pricing", "/plans", "/pricing-plans", "/cost"],
+            "api": ["/docs", "/api", "/developers", "/api-docs", "/documentation"],
+            "support": ["/support", "/help", "/resources", "/training"],
+            "compliance": ["/security", "/compliance", "/trust", "/certifications"],
+            "technical": ["/docs", "/documentation", "/technical-docs", "/integration"]
+        }
+        
+        paths = patterns.get(doc_type, [f"/{doc_type}"])
+        return [urljoin(base_website, path) for path in paths[:3]]
 
 
 # Global client instance
