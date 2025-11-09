@@ -4,7 +4,7 @@ Enhanced with multi-step RAG for thorough compliance research
 """
 from services.agents.base_agent import BaseAgent
 from services.document_processor import extract_texts_from_files, retrieve_relevant_context
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 
 class ComplianceAgent(BaseAgent):
@@ -59,18 +59,21 @@ class ComplianceAgent(BaseAgent):
         security_findings = self._analyze_security_features(compliance_info, company_name)
         findings.extend(security_findings)
         
-        # Calculate score based on findings
-        score = self._calculate_compliance_score(findings)
+        # Determine status and score based on evidence quality
+        status, score = self._determine_status_and_score(findings)
         
         # Generate comprehensive notes
         notes = self._generate_compliance_notes(findings, company_name)
         
         # Generate management-friendly summary
-        summary = self._generate_executive_summary(findings, score, company_name)
+        summary = self._generate_executive_summary(findings, score, company_name, status)
         
         # Extract key strengths and risks for quick scanning
         strengths = [f for f in findings if any(kw in f.lower() for kw in ["certified", "compliant", "supports", "provides"])][:4]
         risks = [f for f in findings if any(kw in f.lower() for kw in ["not", "unable", "unclear", "unavailable", "no"])][:4]
+        
+        # Generate recommendations based on status
+        recommendations = self._generate_recommendations(status, company_name, risks)
         
         # Create structured output
         output = self.create_structured_output(
@@ -79,18 +82,98 @@ class ComplianceAgent(BaseAgent):
             notes=notes,
             summary=summary,
             strengths=strengths,
-            risks=risks
+            risks=risks,
+            status=status,
+            recommendations=recommendations
         )
         
         self.emit_event("agent_complete", {
             "status": "completed",
-            "score": score,
+            "dimension_status": status,
+            "score": score if score is not None else "N/A",
             "summary": summary,
             "findings_count": len(findings),
             "sources_count": len(self.sources)
         })
         
         return output
+    
+    def _determine_status_and_score(self, findings: List[str]) -> tuple[str, Optional[float]]:
+        """
+        Determine dimension status and score based on evidence quality.
+        
+        Returns:
+            Tuple of (status, score) where status is "ok"/"insufficient_data"/"risk"
+            and score is 0-5 or None for insufficient data
+        """
+        # Count official sources (most reliable)
+        official_sources = [s for s in self.sources if s.get("credibility") == "official"]
+        
+        # Check if we have NO reliable sources at all
+        if len(self.sources) == 0 or len(official_sources) == 0:
+            return ("insufficient_data", None)
+        
+        # Analyze positive vs negative findings
+        positive = [f for f in findings if any(kw in f.lower() for kw in ["certified", "compliant", "supports", "provides", "available"])]
+        negative = [f for f in findings if any(kw in f.lower() for kw in ["not", "unable", "unclear", "unavailable", "no"])]
+        
+        # If we have mostly negative findings with official sources, this is RISK
+        if len(negative) > len(positive) and len(official_sources) >= 1:
+            score = 1.5
+            return ("risk", score)
+        
+        # If we have positive findings, this is OK
+        if len(positive) > 0:
+            # Calculate score based on positive/negative ratio
+            if len(positive) >= 4 and len(negative) == 0:
+                score = 4.5
+            elif len(positive) >= 3 and len(negative) <= 1:
+                score = 3.5
+            elif len(positive) >= 2:
+                score = 3.0
+            else:
+                score = 2.5
+            return ("ok", score)
+        
+        # Mixed or unclear - insufficient data
+        return ("insufficient_data", None)
+    
+    def _generate_recommendations(self, status: str, vendor_name: str, risks: List[str]) -> List[str]:
+        """Generate actionable recommendations based on status."""
+        recommendations = []
+        
+        if status == "insufficient_data":
+            recommendations.append(
+                f"Request formal security & compliance pack from {vendor_name} (SOC 2 Type II, ISO 27001, DPA, data retention policies)"
+            )
+            recommendations.append(
+                "Do not proceed with vendor selection until official compliance documentation is reviewed"
+            )
+            recommendations.append(
+                "Schedule security review call with vendor to clarify compliance posture"
+            )
+        elif status == "risk":
+            recommendations.append(
+                f"Conduct formal security assessment of {vendor_name} before any procurement decision"
+            )
+            for risk in risks[:2]:  # Top 2 risks
+                recommendations.append(f"Remediation required: {risk}")
+            recommendations.append(
+                "Consider alternative vendors with stronger compliance documentation"
+            )
+        else:  # ok
+            recommendations.append(
+                f"Verify {vendor_name} certifications directly (request latest audit reports)"
+            )
+            if risks:
+                recommendations.append(
+                    f"Clarify remaining gaps: {'; '.join(risks[:2])}"
+                )
+            recommendations.append(
+                "Include compliance requirements in contract SLA"
+            )
+        
+        return recommendations[:4]  # Max 4 recommendations
     
     def _analyze_certifications(self, info: str, vendor_name: str) -> List[str]:
         """Analyze certification information."""
@@ -256,20 +339,30 @@ Return JSON: {{"security_features": ["feature1", "feature2", ...]}}
         else:
             return f"Compliance evaluation based on {len(self.sources)} sources ({len(official_sources)} official). {len(findings)} findings. Additional verification recommended."
     
-    def _generate_executive_summary(self, findings: List[str], score: float, vendor_name: str) -> str:
+    def _generate_executive_summary(self, findings: List[str], score: Optional[float], vendor_name: str, status: str) -> str:
         """Generate a 2-3 sentence executive summary suitable for management."""
         # Count positive vs negative findings
         positive = [f for f in findings if any(kw in f.lower() for kw in ["certified", "compliant", "supports", "provides", "available"])]
         negative = [f for f in findings if any(kw in f.lower() for kw in ["not", "unable", "unclear", "unavailable", "no"])]
         
-        if score >= 4.0:
-            return f"{vendor_name} demonstrates strong compliance posture with {len(positive)} verified security controls and certifications. Documentation is comprehensive and confidence is high for enterprise deployment."
-        elif score >= 3.0:
-            return f"{vendor_name} meets basic compliance requirements with {len(positive)} documented controls, though {len(negative)} gaps require clarification before deployment in a regulated environment."
-        elif score >= 2.0:
-            return f"{vendor_name} shows limited compliance documentation with only {len(positive)} verified controls and {len(negative)} significant gaps. Formal security review required before consideration."
-        else:
+        # Handle insufficient data case explicitly
+        if status == "insufficient_data":
+            official_sources = [s for s in self.sources if s.get("credibility") == "official"]
             if len(self.sources) == 0:
-                return f"Could not verify compliance posture for {vendor_name} from accessible documentation. Formal security and compliance pack (SOC 2, ISO 27001, DPA) must be requested directly from vendor."
+                return f"⚠️ **Insufficient public data** - Could not access compliance documentation for {vendor_name}. No reliable information about SOC 2, ISO 27001, or data handling practices could be verified from public sources. Formal security and compliance pack must be requested directly from vendor before evaluation can proceed."
+            elif len(official_sources) == 0:
+                return f"⚠️ **Insufficient public data** - Found {len(self.sources)} community/third-party sources for {vendor_name}, but no official compliance documentation. Cannot verify security certifications or data handling policies without official attestations. Request vendor's security pack (SOC 2 Type II, ISO 27001, DPA) for accurate assessment."
             else:
-                return f"{vendor_name} compliance posture is concerning with {len(negative)} documented gaps and minimal verifiable security controls. Not recommended for regulated financial services without substantial remediation."
+                return f"⚠️ **Insufficient public data** - Limited official documentation found for {vendor_name}. {len(negative)} critical gaps identified that require clarification. Cannot make safe recommendation without complete compliance picture."
+        
+        # Handle risk case
+        if status == "risk":
+            return f"🔴 **High Risk** - {vendor_name} compliance posture shows {len(negative)} significant concerns with minimal verifiable security controls ({len(positive)} positive findings). Not recommended for regulated financial services without substantial remediation and formal security assessment."
+        
+        # Handle OK cases (score-based)
+        if score and score >= 4.0:
+            return f"✅ {vendor_name} demonstrates strong compliance posture with {len(positive)} verified security controls and certifications. Documentation is comprehensive and confidence is high for enterprise deployment."
+        elif score and score >= 3.0:
+            return f"✅ {vendor_name} meets basic compliance requirements with {len(positive)} documented controls, though {len(negative)} gaps require clarification before deployment in a regulated environment."
+        else:
+            return f"⚠️ {vendor_name} shows limited compliance documentation with only {len(positive)} verified controls and {len(negative)} gaps. Formal security review required before consideration."

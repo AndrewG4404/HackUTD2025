@@ -14,6 +14,34 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from urllib.parse import urlparse
 
+# Vendor domain mappings for better official source targeting
+VENDOR_DOMAINS = {
+    "slack": ["slack.com"],
+    "microsoft": ["microsoft.com", "learn.microsoft.com", "docs.microsoft.com"],
+    "atlassian": ["atlassian.com", "support.atlassian.com", "confluence.atlassian.com"],
+    "servicenow": ["servicenow.com", "docs.servicenow.com"],
+    "google": ["cloud.google.com", "workspace.google.com", "support.google.com"],
+    "zendesk": ["zendesk.com", "support.zendesk.com"],
+    "freshservice": ["freshservice.com", "support.freshservice.com"],
+    "jira": ["atlassian.com", "support.atlassian.com"],
+    "salesforce": ["salesforce.com", "help.salesforce.com", "developer.salesforce.com"],
+    "zoom": ["zoom.us", "support.zoom.us"],
+    "dropbox": ["dropbox.com", "help.dropbox.com"],
+    "box": ["box.com", "support.box.com"],
+    "asana": ["asana.com", "asana.com/guide"],
+    "monday": ["monday.com", "support.monday.com"],
+    "notion": ["notion.so", "notion.com"],
+    "hubspot": ["hubspot.com", "knowledge.hubspot.com"],
+}
+
+# Community/noise domains to filter out or downweight
+COMMUNITY_DOMAINS = [
+    "reddit.com", "medium.com", "dev.to", "quora.com", 
+    "stackexchange.com", "stackoverflow.com", "community.",
+    "forum.", "discuss.", "youtube.com", "twitter.com",
+    "facebook.com", "linkedin.com/pulse"
+]
+
 
 class NemotronClient:
     """
@@ -346,8 +374,7 @@ If the base website is https://example.com and you find /pricing, return https:/
         max_hops: int = 1  # Now defaults to 1 to save API calls
     ) -> List[Dict[str, Any]]:
         """
-        Single comprehensive search (simplified from multi-hop to save API quota).
-        For hackathon: does ONE targeted search and fetches top results.
+        Tiered search strategy: prefer official vendor docs, fallback to broader web.
         
         Args:
             initial_query: Search query (e.g., "ServiceNow SAML SSO Okta")
@@ -362,48 +389,95 @@ If the base website is https://example.com and you find /pricing, return https:/
         
         print(f"[NemotronClient] Single comprehensive search: {initial_query}")
         
-        # Do ONE web search (with site hint for better results)
-        search_results = await self.search_web(
-            query=f"{vendor_name} {initial_query}",
-            max_results=5,
-            site_hint=base_website
-        )
+        # Extract base domain from website
+        vendor_domain = self._extract_base_domain(base_website)
         
-        # Fetch top 3 URLs
-        for result in search_results[:3]:
-            url = result.get("href") or result.get("url", "")
-            if not url:
-                continue
+        # Check if we have known subdomains for this vendor
+        vendor_key = vendor_name.lower().split()[0]  # "Slack Technologies" -> "slack"
+        known_domains = VENDOR_DOMAINS.get(vendor_key, [vendor_domain])
+        
+        # Strategy 1: Domain-restricted search (official sources)
+        print(f"[NemotronClient] 🔍 Searching official domains: {known_domains}")
+        for domain in known_domains[:2]:  # Try top 2 known domains
+            site_restricted_query = f"site:{domain} {initial_query}"
+            search_results = await self.search_web(
+                query=site_restricted_query,
+                max_results=3
+            )
             
-            try:
-                content = self.fetch_url(url, max_chars=8000)
-                
-                # Skip if error or very short
-                if "Error fetching URL" in content or len(content) < 100:
+            for result in search_results[:2]:  # Take top 2 from each domain
+                url = result.get("href") or result.get("url", "")
+                if not url or self._is_noise_domain(url):
                     continue
                 
-                # Extract relevant excerpt
-                excerpt = self._extract_relevant_excerpt(content, initial_query)
-                
-                # Judge credibility
-                credibility = self._judge_source_credibility(url, vendor_name)
-                
-                source = {
-                    "url": url,
-                    "title": result.get("title", "") or self._extract_title(url, content),
-                    "content": content,
-                    "excerpt": excerpt,
-                    "credibility": credibility,
-                    "accessed_at": datetime.utcnow().isoformat(),
-                    "query": initial_query
-                }
-                sources.append(source)
-                
-            except Exception as e:
-                print(f"[NemotronClient] Error processing {url}: {e}")
-                continue
+                try:
+                    content = self.fetch_url(url, max_chars=8000)
+                    
+                    if "Error fetching URL" in content or len(content) < 100:
+                        continue
+                    
+                    excerpt = self._extract_relevant_excerpt(content, initial_query)
+                    credibility = self._judge_source_credibility(url, vendor_name, vendor_domain)
+                    
+                    source = {
+                        "url": url,
+                        "title": result.get("title", "") or self._extract_title(url, content),
+                        "content": content,
+                        "excerpt": excerpt,
+                        "credibility": credibility,
+                        "accessed_at": datetime.utcnow().isoformat(),
+                        "query": initial_query
+                    }
+                    sources.append(source)
+                    
+                except Exception as e:
+                    print(f"[NemotronClient] Error processing {url}: {e}")
+                    continue
         
-        print(f"[NemotronClient] Search complete: {len(sources)} sources found")
+        # Strategy 2: If insufficient official sources, do broader search
+        official_count = len([s for s in sources if s["credibility"] == "official"])
+        if official_count < 2:
+            print(f"[NemotronClient] ℹ️  Only {official_count} official sources, broadening search...")
+            broader_results = await self.search_web(
+                query=f"{vendor_name} {initial_query}",
+                max_results=5
+            )
+            
+            for result in broader_results[:3]:
+                url = result.get("href") or result.get("url", "")
+                if not url or self._is_noise_domain(url):
+                    continue
+                
+                # Skip if already have this URL
+                if any(s["url"] == url for s in sources):
+                    continue
+                
+                try:
+                    content = self.fetch_url(url, max_chars=8000)
+                    
+                    if "Error fetching URL" in content or len(content) < 100:
+                        continue
+                    
+                    excerpt = self._extract_relevant_excerpt(content, initial_query)
+                    credibility = self._judge_source_credibility(url, vendor_name, vendor_domain)
+                    
+                    source = {
+                        "url": url,
+                        "title": result.get("title", "") or self._extract_title(url, content),
+                        "content": content,
+                        "excerpt": excerpt,
+                        "credibility": credibility,
+                        "accessed_at": datetime.utcnow().isoformat(),
+                        "query": initial_query
+                    }
+                    sources.append(source)
+                    
+                except Exception as e:
+                    print(f"[NemotronClient] Error processing {url}: {e}")
+                    continue
+        
+        official_final = len([s for s in sources if s["credibility"] == "official"])
+        print(f"[NemotronClient] Search complete: {len(sources)} sources found ({official_final} official)")
         return sources
     
     # _discover_urls_for_query removed - now using direct Brave Search with site_hint
@@ -502,24 +576,73 @@ If the base website is https://example.com and you find /pricing, return https:/
         path = urlparse(url).path
         return path.strip('/').replace('/', ' > ').title() or "Documentation"
     
-    def _judge_source_credibility(self, url: str, vendor_name: str) -> str:
+    def _extract_base_domain(self, url: str) -> str:
+        """
+        Extract registrable domain from URL (e.g., slack.com from https://trust.slack.com).
+        
+        Args:
+            url: Full URL or domain
+        
+        Returns:
+            Base domain (e.g., "slack.com")
+        """
+        try:
+            if not url.startswith(('http://', 'https://')):
+                url = f'https://{url}'
+            parsed = urlparse(url)
+            # Get hostname and extract registrable domain
+            hostname = parsed.netloc or parsed.path
+            # Remove www.
+            hostname = hostname.replace('www.', '')
+            # For subdomains, extract base domain (last 2 parts)
+            parts = hostname.split('.')
+            if len(parts) >= 2:
+                return '.'.join(parts[-2:])
+            return hostname
+        except:
+            return url
+    
+    def _is_noise_domain(self, url: str) -> bool:
+        """
+        Check if URL is from a community/noise domain that should be filtered.
+        
+        Args:
+            url: URL to check
+        
+        Returns:
+            True if noise domain
+        """
+        url_lower = url.lower()
+        return any(noise in url_lower for noise in COMMUNITY_DOMAINS)
+    
+    def _judge_source_credibility(self, url: str, vendor_name: str, vendor_domain: str = "") -> str:
         """
         Judge source credibility: official, third-party, or community.
+        NOW: Treats any URL on vendor's registrable domain as official.
+        
+        Args:
+            url: Source URL
+            vendor_name: Vendor name
+            vendor_domain: Base vendor domain (e.g., "slack.com")
         
         Returns:
             "official", "third-party-trusted", or "community"
         """
         url_lower = url.lower()
-        vendor_lower = vendor_name.lower().replace(' ', '')
         
-        # Check if official (vendor domain)
-        if vendor_lower in url_lower:
+        # Check if on vendor's domain (most reliable indicator)
+        if vendor_domain and vendor_domain in url_lower:
             return "official"
         
-        # Trusted third parties
+        # Fallback: check vendor name (less reliable)
+        vendor_lower = vendor_name.lower().replace(' ', '').replace('-', '')
+        if vendor_lower in url_lower.replace('-', ''):
+            return "official"
+        
+        # Trusted third parties (analyst firms, tech media)
         trusted_domains = [
-            "gartner.com", "forrester.com", "g2.com", "techcrunch.com",
-            "zdnet.com", "computerworld.com", "infoworld.com", "medium.com"
+            "gartner.com", "forrester.com", "g2.com", "capterra.com",
+            "techcrunch.com", "zdnet.com", "computerworld.com", "infoworld.com"
         ]
         
         if any(domain in url_lower for domain in trusted_domains):

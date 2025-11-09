@@ -3,10 +3,11 @@ Core API Routes (Teammate 1)
 Handles evaluation creation, file uploads, and CRUD operations
 """
 import json
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from database import client as mongo_client  # noqa: F401
 from database.models import Evaluation, FileInfo, Vendor, Weights
@@ -15,6 +16,7 @@ from database.repository import (
     get_evaluation as repo_get_evaluation,
     list_evaluations as repo_list_evaluations,
     update_evaluation as repo_update_evaluation,
+    update_vendor_decision as repo_update_vendor_decision,
 )
 from services.file_service import save_uploaded_files
 
@@ -220,4 +222,78 @@ async def list_evaluations(
     List all evaluations with pagination.
     """
     return repo_list_evaluations(limit=limit, skip=skip)
+
+
+class VendorDecisionUpdate(BaseModel):
+    """Request model for updating vendor decision"""
+    status: str
+    notes: Optional[str] = None
+    pending_actions: List[str] = []
+
+
+@router.post("/evaluations/{evaluation_id}/vendors/{vendor_id}/decision")
+async def set_vendor_decision(
+    evaluation_id: str,
+    vendor_id: str,
+    update: VendorDecisionUpdate,
+):
+    """
+    Update vendor onboarding decision status.
+    Allows marking vendors as approved (with/without pending actions) or declined.
+    """
+    # Validate status
+    valid_statuses = ["approved_pending_actions", "approved", "declined"]
+    if update.status not in valid_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid decision status. Must be one of: {', '.join(valid_statuses)}"
+        )
+    
+    # Get evaluation to validate vendor exists and check compliance
+    evaluation = repo_get_evaluation(evaluation_id)
+    if not evaluation:
+        raise HTTPException(status_code=404, detail="Evaluation not found")
+    
+    # Find vendor
+    vendor = next((v for v in evaluation.get("vendors", []) if v["id"] == vendor_id), None)
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found in evaluation")
+    
+    # Compliance gating: prevent full approval if compliance status is not "ok"
+    if update.status == "approved":
+        compliance = vendor.get("agent_outputs", {}).get("compliance", {})
+        compliance_status = compliance.get("status", "insufficient_data")
+        if compliance_status != "ok":
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot fully approve vendor with incomplete or failing compliance. Use 'approved_pending_actions' instead."
+            )
+    
+    # Build decision object
+    decision = {
+        "status": update.status,
+        "decided_by": None,  # Can be extended to track user when auth is added
+        "decided_at": datetime.utcnow(),
+        "notes": update.notes,
+        "pending_actions": update.pending_actions,
+    }
+    
+    # Update in database
+    updated_evaluation = repo_update_vendor_decision(evaluation_id, vendor_id, decision)
+    
+    if not updated_evaluation:
+        raise HTTPException(status_code=500, detail="Failed to update vendor decision")
+    
+    # Optionally update evaluation status to "finalized" if any vendor is approved/approved_pending_actions
+    vendors = updated_evaluation.get("vendors", [])
+    any_approved = any(
+        v.get("decision", {}).get("status") in ["approved", "approved_pending_actions"]
+        for v in vendors
+    )
+    
+    if any_approved and updated_evaluation.get("status") == "completed":
+        repo_update_evaluation(evaluation_id, {"status": "finalized"})
+        updated_evaluation["status"] = "finalized"
+    
+    return updated_evaluation
 

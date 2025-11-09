@@ -196,36 +196,44 @@ def run_assessment_pipeline(evaluation_id: str) -> Dict[str, Any]:
             agent_outputs["adoption"] = agents["adoption"].execute(context)
             
             # Calculate weighted score using inferred dimension importance
-            compliance_score = agent_outputs["compliance"].get("score", 0.0)
-            finance_score = agent_outputs["finance"].get("score", 0.0)
-            interop_score = agent_outputs["interoperability"].get("score", 0.0)
-            adoption_score = agent_outputs["adoption"].get("score", 0.0)
+            # Handle None scores (insufficient data) by excluding them from average
+            compliance_score = agent_outputs["compliance"].get("score")
+            finance_score = agent_outputs["finance"].get("score")
+            interop_score = agent_outputs["interoperability"].get("score")
+            adoption_score = agent_outputs["adoption"].get("score")
             
-            # Weighted average using inferred priorities
-            weight_sum = sum([
-                dimension_importance["security"],
-                dimension_importance["cost"],
-                dimension_importance["interoperability"],
-                dimension_importance["adoption"]
-            ]) or 1
+            # Build list of (score, weight) pairs, excluding None scores
+            scored_dimensions = []
+            if compliance_score is not None:
+                scored_dimensions.append((compliance_score, dimension_importance["security"]))
+            if finance_score is not None:
+                scored_dimensions.append((finance_score, dimension_importance["cost"]))
+            if interop_score is not None:
+                scored_dimensions.append((interop_score, dimension_importance["interoperability"]))
+            if adoption_score is not None:
+                scored_dimensions.append((adoption_score, dimension_importance["adoption"]))
             
-            weighted_score = (
-                compliance_score * dimension_importance["security"] +
-                finance_score * dimension_importance["cost"] +
-                interop_score * dimension_importance["interoperability"] +
-                adoption_score * dimension_importance["adoption"]
-            ) / weight_sum
+            # Calculate weighted average (or None if all dimensions have insufficient data)
+            if scored_dimensions:
+                total_weighted = sum(score * weight for score, weight in scored_dimensions)
+                total_weight = sum(weight for _, weight in scored_dimensions)
+                weighted_score = total_weighted / total_weight if total_weight > 0 else None
+            else:
+                weighted_score = None
             
-            print(f"  Weighted Score: {weighted_score:.2f}/5.0")
+            if weighted_score is not None:
+                print(f"  Weighted Score: {weighted_score:.2f}/5.0")
+            else:
+                print(f"  Weighted Score: N/A (insufficient data for all dimensions)")
             
             # Update vendor data
             updated_vendors.append({
                 **vendor,
                 "agent_outputs": agent_outputs,
-                "total_score": round(weighted_score, 2)
+                "total_score": round(weighted_score, 2) if weighted_score is not None else None
             })
             
-            scored_vendors.append((vendor["id"], weighted_score, vendor.get("name", "Unknown")))
+            scored_vendors.append((vendor["id"], weighted_score if weighted_score is not None else 0.0, vendor.get("name", "Unknown")))
         
         # Update evaluation with vendor scores before running comparison
         update_evaluation(evaluation_id, {"vendors": updated_vendors})
@@ -370,27 +378,46 @@ async def run_assessment_pipeline_async(evaluation_id: str, event_callback=None)
             agent_outputs["adoption"] = await agents["adoption"].execute(ctx)
             
             # Calculate weighted score using inferred dimension importance
-            s = agent_outputs["compliance"].get("score", 0.0)
-            c = agent_outputs["finance"].get("score", 0.0)
-            i = agent_outputs["interoperability"].get("score", 0.0)
-            a = agent_outputs["adoption"].get("score", 0.0)
-            w_sum = sum([dimension_importance["security"], dimension_importance["cost"], dimension_importance["interoperability"], dimension_importance["adoption"]]) or 1
-            weighted = (s*dimension_importance["security"] + c*dimension_importance["cost"] + i*dimension_importance["interoperability"] + a*dimension_importance["adoption"]) / w_sum
+            # Handle None scores (insufficient data) by excluding them from average
+            s = agent_outputs["compliance"].get("score")
+            c = agent_outputs["finance"].get("score")
+            i = agent_outputs["interoperability"].get("score")
+            a = agent_outputs["adoption"].get("score")
             
-            print(f"  Weighted Score: {weighted:.2f}/5.0")
+            # Build list of (score, weight) pairs, excluding None scores
+            scored = []
+            if s is not None:
+                scored.append((s, dimension_importance["security"]))
+            if c is not None:
+                scored.append((c, dimension_importance["cost"]))
+            if i is not None:
+                scored.append((i, dimension_importance["interoperability"]))
+            if a is not None:
+                scored.append((a, dimension_importance["adoption"]))
+            
+            # Calculate weighted average (or None if all dimensions insufficient)
+            if scored:
+                weighted = sum(score * w for score, w in scored) / sum(w for _, w in scored)
+            else:
+                weighted = None
+            
+            if weighted is not None:
+                print(f"  Weighted Score: {weighted:.2f}/5.0")
+            else:
+                print(f"  Weighted Score: N/A (insufficient data)")
             
             updated_vendors.append({
                 **vendor,
                 "agent_outputs": agent_outputs,
-                "total_score": round(weighted, 2)
+                "total_score": round(weighted, 2) if weighted is not None else None
             })
-            scored_vendors.append((vendor["id"], weighted, vendor.get("name", "Unknown")))
+            scored_vendors.append((vendor["id"], weighted if weighted is not None else 0.0, vendor.get("name", "Unknown")))
             
             if event_callback:
                 event_callback("vendor_complete", {
                     "vendor_id": vendor["id"],
                     "vendor_name": vendor["name"],
-                    "total_score": round(weighted, 2)
+                    "total_score": round(weighted, 2) if weighted is not None else None
                 })
         
         # Update evaluation with vendor scores before running comparison
