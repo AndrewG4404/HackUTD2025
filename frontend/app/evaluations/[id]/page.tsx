@@ -4,11 +4,12 @@
  */
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import api from '@/lib/api'
 import type { Evaluation } from '@/lib/types'
 import Card from '@/components/ui/Card'
+import { WorkflowVisualization } from '@/components/WorkflowVisualization'
 
 export default function EvaluationPage() {
   const params = useParams()
@@ -16,18 +17,18 @@ export default function EvaluationPage() {
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const fetchEvaluation = async () => {
-      try {
-        const data = await api.getEvaluation(evaluationId)
-        setEvaluation(data)
-      } catch (error) {
-        console.error('Error fetching evaluation:', error)
-      } finally {
-        setLoading(false)
-      }
+  const fetchEvaluation = useCallback(async () => {
+    try {
+      const data = await api.getEvaluation(evaluationId)
+      setEvaluation(data)
+    } catch (error) {
+      console.error('Error fetching evaluation:', error)
+    } finally {
+      setLoading(false)
     }
+  }, [evaluationId])
 
+  useEffect(() => {
     fetchEvaluation()
 
     // Poll if status is pending or running
@@ -38,7 +39,13 @@ export default function EvaluationPage() {
     }, 5000) // Poll every 5 seconds
 
     return () => clearInterval(interval)
-  }, [evaluationId, evaluation?.status])
+  }, [evaluationId, evaluation?.status, fetchEvaluation])
+
+  // Callback for when workflow completes
+  const handleWorkflowComplete = useCallback(() => {
+    console.log('Workflow completed, refreshing evaluation data...')
+    setTimeout(() => fetchEvaluation(), 1500) // Wait a bit for DB to update
+  }, [fetchEvaluation])
 
   if (loading) {
     return (
@@ -84,22 +91,15 @@ export default function EvaluationPage() {
           </div>
         </div>
         
+        {/* Live Workflow Visualization - Show when running */}
         {isRunning && (
-          <Card>
-            <div className="flex items-center mb-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-4"></div>
-              <h2 className="text-xl font-semibold text-white">Pipeline Status: {evaluation.status}</h2>
-            </div>
-            <div className="space-y-4">
-              <p className="text-gray-400">Processing evaluation with AI agents...</p>
-              <div className="space-y-2">
-                <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-600 rounded-full animate-pulse" style={{ width: '60%' }}></div>
-                </div>
-                <p className="text-sm text-gray-500">This may take a few minutes</p>
-              </div>
-            </div>
-          </Card>
+          <div className="mb-8">
+            <WorkflowVisualization 
+              evaluationId={evaluationId} 
+              evaluationType={evaluation.type}
+              onComplete={handleWorkflowComplete}
+            />
+          </div>
         )}
 
         {isFailed && (
