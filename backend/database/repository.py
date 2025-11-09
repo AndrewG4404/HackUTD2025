@@ -1,12 +1,14 @@
 """
-MongoDB repository for evaluations
-CRUD operations for evaluation documents
+MongoDB repository for evaluations.
+CRUD operations for evaluation documents.
 """
+from datetime import datetime
 from typing import List, Optional
+
 from bson import ObjectId
+from database import client as mongo_client  # noqa: F401
 from database.connection import get_database
 from database.models import Evaluation, Vendor
-from datetime import datetime
 
 
 def create_evaluation(evaluation: Evaluation) -> str:

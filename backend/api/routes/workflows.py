@@ -1,8 +1,9 @@
 """
-Agent Workflow API Routes (Teammate 2)
-Handles running agent pipelines for application and assessment workflows
+Agent Workflow API Routes (Teammate 2).
+Handles running agent pipelines for application and assessment workflows.
 """
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from database import client as mongo_client  # noqa: F401
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from services.workflows.application_pipeline import run_application_pipeline
 from services.workflows.assessment_pipeline import run_assessment_pipeline
 

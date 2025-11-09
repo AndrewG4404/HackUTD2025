@@ -1,9 +1,11 @@
 """
-MongoDB data models and schemas
-Based on the PRD data model specification
+MongoDB data models and schemas.
+Based on the PRD data model specification.
 """
-from typing import List, Optional, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from database import client as mongo_client  # noqa: F401
 from pydantic import BaseModel, Field
 
 
