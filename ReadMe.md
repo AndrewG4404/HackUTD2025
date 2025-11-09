@@ -287,27 +287,169 @@ All agents now feature **intelligent documentation discovery and analysis**:
 - Progress tracking and error handling
 - MongoDB integration
 
-### 🔍 Key Features - Intelligent RAG on Live Documentation
+### 🔍 Enhanced Multi-Step RAG with Source Tracking
 
-Each agent now **automatically discovers and analyzes official vendor documentation**:
+All agents now feature **intelligent multi-step research with automatic source citation**:
 
-1. **Documentation Discovery**: LLM intelligently finds relevant docs (privacy, pricing, API, support)
-2. **Live Web Scraping**: Fetches and analyzes current official documentation
-3. **RAG-Enhanced Analysis**: Retrieves relevant context from discovered docs
-4. **Comprehensive Evaluation**: Enterprise-grade compliance and technical assessments
+#### **Core RAG Enhancements**
 
-**Example workflow:**
-- User provides: `company_name="ServiceNow"`, `website="https://servicenow.com"`
-- Compliance Agent:
-  - Discovers: `/privacy-policy`, `/trust`, `/security`
-  - Fetches and analyzes official documentation
-  - Performs GDPR, SOC2, data retention analysis
-- Finance Agent:
-  - Discovers: `/pricing`, `/plans`
-  - Analyzes pricing models and TCO
-- Interoperability Agent:
-  - Discovers: `/developers`, `/api-docs`
-  - Evaluates REST API, SSO, webhooks
+1. **Multi-Step Search (Up to 3 Hops)**
+   - Agents perform initial search for documentation
+   - Automatically generate follow-up queries when initial results are incomplete
+   - Each hop discovers new sources and refines understanding
+   - Example: "ServiceNow SSO" → finds basic info → follows up with "ServiceNow SAML 2.0 Okta configuration"
+
+2. **Intelligent Source Discovery**
+   - LLM-powered URL discovery based on query intent
+   - Fallback to common documentation patterns (e.g., `/privacy`, `/security`, `/pricing`)
+   - Handles inaccessible documentation gracefully (403/404 errors)
+   - Discovers alternative sources when official docs are unavailable
+
+3. **Source Credibility Judging**
+   - **Official**: Vendor's own domain (highest trust)
+   - **Third-Party Trusted**: Gartner, Forrester, G2, Medium, etc.
+   - **Community**: Forums, Reddit, Stack Overflow
+   - Used to calculate confidence scores
+
+4. **Structured Output Schema**
+   ```json
+   {
+     "score": 4.2,
+     "findings": ["SOC 2 Type II certified", "ISO 27001 compliant"],
+     "notes": "Compliance evaluation based on 4 official sources...",
+     "sources": [
+       {
+         "url": "https://trust.servicenow.com",
+         "title": "Security & Compliance",
+         "excerpt": "SOC 2 Type II audit report...",
+         "credibility": "official",
+         "accessed_at": "2025-01-09T12:00:00Z",
+         "query": "ServiceNow SOC2 ISO27001 certifications"
+       }
+     ],
+     "ambiguities": ["HIPAA compliance requires BAA confirmation"],
+     "confidence": "high"
+   }
+   ```
+
+5. **Assumption Documentation**
+   - All assumptions explicitly tracked in `ambiguities` field
+   - Example: "Pricing for 300 users requires vendor quote - estimates based on industry averages"
+   - Ensures transparency in AI-generated recommendations
+
+#### **Agent-Specific Research Areas**
+
+**ComplianceAgent** performs 4 targeted searches:
+- Security certifications (SOC2, ISO27001, PCI-DSS, FedRAMP)
+- Privacy & regulatory compliance (GDPR, CCPA, HIPAA, data residency)
+- Data handling policies (ownership, retention, deletion)
+- Security features (SSO, encryption, audit logs, RBAC, MFA)
+
+**InteroperabilityAgent** researches:
+- SSO/Authentication (SAML, OAuth, SCIM, Okta, Active Directory)
+- API capabilities (REST, GraphQL, SOAP, SDKs, rate limits)
+- Webhooks/Events (outbound webhooks, event streams)
+- Specific integrations (Slack, Jira, Snowflake, O365) based on use case
+
+**FinanceAgent** analyzes:
+- Pricing models (per-user, tiered, enterprise)
+- Implementation costs (setup fees, migration, customization)
+- Support & training costs (premium plans, certifications)
+- 3-year TCO estimation with sourced data
+
+**AdoptionAgent** evaluates:
+- Implementation timeline and complexity
+- Support availability (24/7, SLAs, response times)
+- Training resources (docs, courses, certifications)
+- Community & ecosystem (forums, partners, marketplace)
+
+#### **Example: ServiceNow Compliance Evaluation Flow**
+
+1. **Agent Initialization**
+   ```
+   ComplianceAgent.execute() called
+   → Emits: agent_start event
+   ```
+
+2. **Research Certifications** (Search #1)
+   ```
+   Query: "ServiceNow SOC2 ISO27001 ISO27017 ISO27018 certifications"
+   → Discovers: trust.servicenow.com, docs.servicenow.com
+   → Fetches content, extracts excerpts
+   → Judges credibility: both "official"
+   → Emits: agent_progress ("Discovered 2 documentation URLs")
+   ```
+
+3. **Analyze with LLM**
+   ```
+   → Combines excerpts from all sources
+   → Passes to Nemotron for analysis
+   → Emits: agent_thinking ("Analyzing certifications with LLM")
+   → Extracts: "SOC 2 Type II since 2015", "ISO 27001 certified"
+   ```
+
+4. **Research Privacy** (Search #2)
+   ```
+   Query: "ServiceNow GDPR CCPA privacy compliance data protection"
+   → Follow-up if needed: "ServiceNow data residency EU US"
+   → Analyzes GDPR compliance, data subject rights
+   ```
+
+5. **Research Data Handling** (Search #3)
+   ```
+   Query: "ServiceNow data retention deletion policy customer data"
+   → Finds: "30-day export window, then deletion"
+   ```
+
+6. **Research Security Features** (Search #4)
+   ```
+   Query: "ServiceNow SAML SSO encryption audit logs RBAC"
+   → Confirms SAML 2.0, encryption, audit trails
+   ```
+
+7. **Calculate & Return**
+   ```
+   → Calculate score: 4.2/5 (based on positive vs negative findings)
+   → Determine confidence: "high" (2+ official sources, 4 total)
+   → Emits: agent_complete (score, findings, sources)
+   → Returns structured output to pipeline
+   ```
+
+#### **Key Improvements Over Original Implementation**
+
+| Before | After |
+|--------|-------|
+| Single URL fetch attempt | Multi-step search with up to 3 hops |
+| No follow-up if info missing | Intelligent follow-up queries generated by LLM |
+| No source tracking | All sources tracked with full metadata |
+| No ambiguity documentation | Assumptions explicitly documented |
+| Generic findings | Specific, evidence-based findings with citations |
+| No confidence indication | Confidence level (high/medium/low) based on source quality |
+| Silent execution | Real-time SSE events for live visualization |
+| Simple dict output | Structured schema with sources, ambiguities, confidence |
+| Basic error handling | Graceful fallbacks for inaccessible documentation |
+
+#### **Implementation Alignment**
+
+✅ **Option B**: Enhanced existing methods, no new API dependencies  
+✅ **Sources Field**: All agents track sources with full metadata (url, title, excerpt, credibility, accessed_at)  
+✅ **Max 3 Follow-ups**: Enforced in `search_with_followup(max_hops=3)`  
+✅ **Document Assumptions**: `ambiguities` list in structured output  
+✅ **LLM Credibility Judging**: Official/third-party-trusted/community labels  
+✅ **Standard Depth**: Not configurable (simple per `.cursorrules`)  
+✅ **Formalized Schema**: score, findings, notes, sources, ambiguities, confidence  
+✅ **Replaced Implementations**: All critical agents (Compliance, Interoperability, Finance, Adoption) completely rewritten  
+✅ **SSE Events**: All agents emit `agent_start`, `agent_thinking`, `agent_progress`, `agent_complete` for live visualization  
+
+#### **Expected Behavior**
+
+When you run an evaluation, you'll see:
+- **ComplianceAgent**: Finds SOC2/ISO certifications from trust pages, cites specific sources
+- **InteroperabilityAgent**: Verifies Okta SSO support, REST APIs, Slack integration with evidence
+- **FinanceAgent**: Estimates TCO with sourced pricing data or industry averages (with ambiguity note)
+- **AdoptionAgent**: Documents support SLAs, training resources from official docs
+
+All findings backed by sources with credibility labels! 🎉
 
 ### 🧪 Testing
 
@@ -348,6 +490,28 @@ The frontend displays a **live agentic workflow visualization** showing:
    - Expandable details for each event (prompts, responses, context)
 
 **For Judges**: Navigate to `/evaluations/{id}` immediately after starting a workflow to see the live visualization in action. The page will show agents reasoning, discovering documentation, and building the evaluation in real-time.
+
+---
+
+### 🛠️ Implementation Guides
+
+**To implement the SSE streaming visualization, follow these detailed step-by-step guides:**
+
+📘 **Backend Implementation**: [`BACKEND_SSE_GUIDE.md`](./BACKEND_SSE_GUIDE.md)
+- Add SSE streaming endpoint to FastAPI
+- Create async pipeline wrappers with event callbacks
+- Event format specifications and testing procedures
+- Complete code examples with error handling
+
+📗 **Frontend Implementation**: [`FRONTEND_SSE_GUIDE.md`](./FRONTEND_SSE_GUIDE.md)
+- Create `useWorkflowStream` React hook for EventSource management
+- Build live visualization components (Agent Pipeline, Communication Panel, Timeline)
+- Integrate with evaluation detail page
+- Styling, UX best practices, and troubleshooting
+
+Both guides include complete working code, testing instructions, and common issue resolutions.
+
+---
 
 ### 🏗️ Implementation Architecture
 

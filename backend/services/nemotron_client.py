@@ -1,12 +1,15 @@
 """
 Nemotron API client using NVIDIA API endpoints
 Uses OpenAI-compatible interface
+Enhanced with multi-step RAG capabilities
 """
 import os
 import httpx
-from typing import Dict, Any, Optional, List
+import json
+from typing import Dict, Any, Optional, List, Tuple
 from openai import OpenAI
 from bs4 import BeautifulSoup
+from datetime import datetime
 
 
 class NemotronClient:
@@ -204,6 +207,238 @@ If the base website is https://example.com and you find /pricing, return https:/
         
         paths = patterns.get(doc_type, [f"/{doc_type}"])
         return [urljoin(base_website, path) for path in paths[:3]]
+    
+    def search_with_followup(
+        self,
+        initial_query: str,
+        vendor_name: str,
+        base_website: str,
+        max_hops: int = 3
+    ) -> List[Dict[str, Any]]:
+        """
+        Multi-step search with intelligent follow-up queries.
+        Max 3 hops to prevent infinite loops.
+        
+        Args:
+            initial_query: Initial search query (e.g., "ServiceNow SAML SSO Okta")
+            vendor_name: Vendor name for context
+            base_website: Vendor website
+            max_hops: Maximum follow-up searches (default 3)
+        
+        Returns:
+            List of source dicts with {url, title, content, excerpt, credibility, accessed_at}
+        """
+        sources = []
+        queries = [initial_query]
+        
+        for hop in range(max_hops):
+            if hop >= len(queries):
+                break
+            
+            query = queries[hop]
+            print(f"[NemotronClient] Search hop {hop + 1}/{max_hops}: {query}")
+            
+            # Try to find relevant URLs
+            urls = self._discover_urls_for_query(query, vendor_name, base_website)
+            
+            for url in urls[:2]:  # Limit to 2 URLs per hop
+                try:
+                    content = self.fetch_url(url, max_chars=8000)
+                    
+                    # Skip if error or very short
+                    if "Error fetching URL" in content or len(content) < 100:
+                        continue
+                    
+                    # Extract relevant excerpt
+                    excerpt = self._extract_relevant_excerpt(content, query)
+                    
+                    # Judge credibility
+                    credibility = self._judge_source_credibility(url, vendor_name)
+                    
+                    source = {
+                        "url": url,
+                        "title": self._extract_title(url, content),
+                        "content": content,
+                        "excerpt": excerpt,
+                        "credibility": credibility,
+                        "accessed_at": datetime.utcnow().isoformat(),
+                        "query": query
+                    }
+                    sources.append(source)
+                    
+                    # Generate follow-up query if needed and we haven't hit max hops
+                    if hop < max_hops - 1:
+                        followup = self._generate_followup_query(query, excerpt, vendor_name)
+                        if followup and followup not in queries:
+                            queries.append(followup)
+                    
+                except Exception as e:
+                    print(f"[NemotronClient] Error processing {url}: {e}")
+                    continue
+        
+        print(f"[NemotronClient] Search complete: {len(sources)} sources found")
+        return sources
+    
+    def _discover_urls_for_query(self, query: str, vendor_name: str, base_website: str) -> List[str]:
+        """Discover URLs relevant to a specific query."""
+        try:
+            # Use LLM to suggest URLs based on query
+            prompt = f"""Given this search query: "{query}" for vendor "{vendor_name}" (website: {base_website})
+
+Suggest 2-3 most likely URLs where this information would be found.
+Return JSON: {{"urls": ["url1", "url2", ...]}}
+
+Examples:
+- For "ServiceNow SAML SSO" -> ["https://docs.servicenow.com/bundle/...", "https://www.servicenow.com/security"]
+- For "Salesforce pricing Enterprise" -> ["https://www.salesforce.com/editions-pricing/", "https://www.salesforce.com/pricing"]
+"""
+            
+            messages = [
+                {"role": "system", "content": "You are a documentation discovery assistant. Return valid JSON only."},
+                {"role": "user", "content": prompt}
+            ]
+            
+            response = self.chat_completion_json(messages, temperature=0.3, max_tokens=300)
+            
+            if isinstance(response, str):
+                result = json.loads(response)
+            else:
+                result = response
+            
+            urls = result.get("urls", [])
+            
+            # If no URLs, try fallback based on query keywords
+            if not urls:
+                urls = self._query_to_fallback_urls(query, base_website)
+            
+            return urls[:3]
+        except Exception as e:
+            print(f"[NemotronClient] Error discovering URLs for query: {e}")
+            return self._query_to_fallback_urls(query, base_website)
+    
+    def _query_to_fallback_urls(self, query: str, base_website: str) -> List[str]:
+        """Generate fallback URLs based on query keywords."""
+        from urllib.parse import urljoin
+        
+        query_lower = query.lower()
+        paths = []
+        
+        if "price" in query_lower or "cost" in query_lower:
+            paths = ["/pricing", "/plans", "/pricing-plans"]
+        elif "api" in query_lower or "integration" in query_lower:
+            paths = ["/docs", "/api", "/developers"]
+        elif "security" in query_lower or "compliance" in query_lower or "sso" in query_lower:
+            paths = ["/security", "/trust", "/compliance"]
+        elif "support" in query_lower or "training" in query_lower:
+            paths = ["/support", "/help", "/training"]
+        else:
+            paths = ["/docs", "/documentation"]
+        
+        return [urljoin(base_website, path) for path in paths[:3]]
+    
+    def _extract_relevant_excerpt(self, content: str, query: str, max_length: int = 500) -> str:
+        """Extract most relevant excerpt from content based on query."""
+        # Simple keyword matching
+        query_words = query.lower().split()
+        sentences = content.split('.')
+        
+        # Score sentences by query word matches
+        scored = []
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) < 20:
+                continue
+            score = sum(1 for word in query_words if word in sentence.lower())
+            if score > 0:
+                scored.append((score, sentence))
+        
+        if not scored:
+            return content[:max_length]
+        
+        # Return top sentences
+        scored.sort(reverse=True, key=lambda x: x[0])
+        excerpt = '. '.join([s[1] for s in scored[:3]])
+        return excerpt[:max_length]
+    
+    def _extract_title(self, url: str, content: str) -> str:
+        """Extract title from URL or content."""
+        # Try to extract from first line/heading
+        lines = content.split('\n')
+        for line in lines[:5]:
+            line = line.strip()
+            if len(line) > 10 and len(line) < 100:
+                return line
+        
+        # Fallback to URL path
+        from urllib.parse import urlparse
+        path = urlparse(url).path
+        return path.strip('/').replace('/', ' > ').title() or "Documentation"
+    
+    def _judge_source_credibility(self, url: str, vendor_name: str) -> str:
+        """
+        Judge source credibility: official, third-party, or community.
+        
+        Returns:
+            "official", "third-party-trusted", or "community"
+        """
+        url_lower = url.lower()
+        vendor_lower = vendor_name.lower().replace(' ', '')
+        
+        # Check if official (vendor domain)
+        if vendor_lower in url_lower:
+            return "official"
+        
+        # Trusted third parties
+        trusted_domains = [
+            "gartner.com", "forrester.com", "g2.com", "techcrunch.com",
+            "zdnet.com", "computerworld.com", "infoworld.com", "medium.com"
+        ]
+        
+        if any(domain in url_lower for domain in trusted_domains):
+            return "third-party-trusted"
+        
+        return "community"
+    
+    def _generate_followup_query(self, original_query: str, excerpt: str, vendor_name: str) -> Optional[str]:
+        """
+        Generate a follow-up query if the excerpt is incomplete or suggests deeper info exists.
+        
+        Returns:
+            Follow-up query string or None
+        """
+        try:
+            # Ask LLM if follow-up is needed
+            prompt = f"""Given this search query: "{original_query}"
+And this excerpt from documentation: "{excerpt[:300]}..."
+
+Is additional information needed? If yes, suggest ONE specific follow-up query for {vendor_name}.
+If no, return empty.
+
+Return JSON: {{"followup": "specific follow-up query or empty string"}}
+
+Examples:
+- Original: "ServiceNow SSO" | Excerpt: "supports SAML" | Followup: "ServiceNow SAML 2.0 configuration Okta"
+- Original: "Salesforce pricing" | Excerpt: "starting at $25/user" | Followup: ""  (already answered)
+"""
+            
+            messages = [
+                {"role": "system", "content": "You are a search query optimizer. Return valid JSON only."},
+                {"role": "user", "content": prompt}
+            ]
+            
+            response = self.chat_completion_json(messages, temperature=0.3, max_tokens=100)
+            
+            if isinstance(response, str):
+                result = json.loads(response)
+            else:
+                result = response
+            
+            followup = result.get("followup", "").strip()
+            return followup if followup and len(followup) > 5 else None
+            
+        except Exception as e:
+            print(f"[NemotronClient] Error generating follow-up: {e}")
+            return None
 
 
 # Global client instance

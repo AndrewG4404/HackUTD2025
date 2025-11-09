@@ -1,164 +1,282 @@
 """
-Adoption & Support Agent - Customer Success
-Evaluates implementation timeline, training, and support
+Adoption & Support Agent - Customer Success Manager
+Enhanced with multi-step RAG for support and implementation research
 """
 from services.agents.base_agent import BaseAgent
 from services.document_processor import extract_texts_from_files, retrieve_relevant_context
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 
 class AdoptionAgent(BaseAgent):
-    """Agent 6: Adoption & Support Agent"""
+    """
+    Agent 6: Adoption & Support Agent
     
-    def __init__(self):
-        super().__init__("Adoption Agent", "Customer Success")
+    Evaluates:
+    - Implementation timeline
+    - Support availability (24/7, SLAs)
+    - Training resources (docs, courses, certifications)
+    - User community and ecosystem
+    - Change management considerations
+    """
+    
+    def __init__(self, event_callback=None):
+        super().__init__("AdoptionAgent", "Customer Success Manager", event_callback)
     
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Evaluate adoption and support capabilities using RAG.
-        Actively discovers and analyzes official support documentation.
+        Evaluate adoption factors using enhanced RAG.
         """
         vendor = context.get("vendor", {})
+        evaluation = context.get("evaluation", {})
         company_name = vendor.get("name", "Unknown")
         website = vendor.get("website", "")
+        use_case = evaluation.get("use_case", "")
         
-        print(f"[{self.name}] Analyzing support and adoption for {company_name}...")
+        print(f"[{self.name}] Analyzing adoption for {company_name}...")
+        self.emit_event("agent_start", {"status": "starting", "vendor": company_name})
         
-        # Extract document content
-        files = vendor.get("files", [])
-        doc_text = extract_texts_from_files(files) if files else ""
+        findings = []
         
-        # Discover and fetch support documentation
-        doc_urls = vendor.get("doc_urls", [])
+        # 1. Implementation timeline
+        self.emit_event("agent_thinking", {"action": "Researching implementation timeline"})
+        impl_info = self.research_requirement(
+            f"{company_name} implementation timeline deployment time to value onboarding",
+            company_name,
+            website
+        )
+        impl_findings = self._analyze_implementation(impl_info, company_name)
+        findings.extend(impl_findings)
         
-        # Use LLM to discover official support documentation URLs
-        if website and not doc_urls:
-            print(f"[{self.name}] Discovering support documentation URLs...")
-            doc_urls = self.client.discover_documentation_urls(website, "support")
+        # 2. Support availability
+        self.emit_event("agent_thinking", {"action": "Researching support options"})
+        support_info = self.research_requirement(
+            f"{company_name} customer support 24/7 support SLA response time",
+            company_name,
+            website
+        )
+        support_findings = self._analyze_support(support_info, company_name)
+        findings.extend(support_findings)
         
-        # Fetch discovered support documentation
-        for url in doc_urls[:3]:  # Limit to 3 URLs
-            try:
-                print(f"[{self.name}] Fetching: {url}")
-                url_content = self.client.fetch_url(url, max_chars=12000)
-                doc_text += f"\n\n=== Official Support Docs from {url} ===\n{url_content}"
-            except Exception as e:
-                print(f"[{self.name}] Error fetching {url}: {e}")
+        # 3. Training and documentation
+        self.emit_event("agent_thinking", {"action": "Researching training resources"})
+        training_info = self.research_requirement(
+            f"{company_name} training documentation certification courses learning resources",
+            company_name,
+            website
+        )
+        training_findings = self._analyze_training(training_info, company_name)
+        findings.extend(training_findings)
         
-        # Use RAG for support documentation
-        query = "implementation timeline training support SLA documentation onboarding customer success help resources community forum response time"
-        relevant_context = retrieve_relevant_context(query, doc_text, max_context=4000)
+        # 4. Community and ecosystem
+        self.emit_event("agent_thinking", {"action": "Researching community"})
+        community_info = self.research_requirement(
+            f"{company_name} user community forum partner ecosystem marketplace",
+            company_name,
+            website
+        )
+        community_findings = self._analyze_community(community_info, company_name)
+        findings.extend(community_findings)
         
-        system_prompt = f"""You are a {self.role} evaluating vendor adoption and support capabilities.
-Your task is to assess implementation ease, training, and support quality."""
+        # Calculate score
+        score = self._calculate_adoption_score(findings)
         
-        user_prompt = f"""As a {self.role}, evaluate the adoption and support capabilities of {company_name} based on their OFFICIAL documentation.
+        # Generate notes
+        notes = self._generate_adoption_notes(findings, company_name)
+        
+        # Create structured output
+        output = self.create_structured_output(
+            score=score,
+            findings=findings,
+            notes=notes,
+            timeline=self._extract_timeline(impl_findings)
+        )
+        
+        self.emit_event("agent_complete", {
+            "status": "completed",
+            "score": score,
+            "findings_count": len(findings),
+            "sources_count": len(self.sources)
+        })
+        
+        return output
+    
+    def _analyze_implementation(self, info: str, vendor_name: str) -> List[str]:
+        """Analyze implementation timeline and complexity."""
+        findings = []
+        
+        prompt = f"""Analyze {vendor_name}'s implementation timeline and process:
 
-Official Support Documentation:
-{relevant_context if relevant_context else "No support documentation available"}
+{info[:3000]}
 
-Perform a comprehensive adoption and support evaluation:
+Identify:
+1. Typical implementation timeline (weeks/months)
+2. Deployment complexity (simple, moderate, complex)
+3. Data migration process
+4. Configuration requirements
+5. Time to value
 
-**Implementation & Onboarding:**
-- Typical implementation timeline
-- Implementation methodology (self-service vs guided)
-- Onboarding program availability
-- Implementation success rate
-- Go-live support
-- Data migration assistance
-- Dedicated implementation manager
-
-**Training Resources:**
-- Training program availability
-- Training formats (online, in-person, webinar)
-- Certification programs
-- Knowledge base/documentation
-- Video tutorials
-- Train-the-trainer programs
-- Training costs (included vs paid)
-
-**Support Channels:**
-- 24/7 support availability
-- Support tiers (standard, premium, enterprise)
-- Email support response time
-- Phone support availability
-- Live chat support
-- Dedicated account manager
-- Emergency hotline
-
-**SLA & Response Times:**
-- Support SLA commitments
-- Response time guarantees by severity
-- Resolution time targets
-- Uptime guarantees
-- Maintenance windows
-- Escalation procedures
-
-**Documentation & Resources:**
-- User documentation quality
-- Admin documentation
-- API/developer documentation
-- Troubleshooting guides
-- FAQ/knowledge base
-- Release notes
-- Changelog transparency
-
-**Community & Ecosystem:**
-- User community forum
-- Community activity level
-- User conferences/events
-- Partner ecosystem
-- Third-party integrations marketplace
-- User feedback incorporation
-
-**Customer Success:**
-- Proactive customer success engagement
-- Regular business reviews
-- Best practice sharing
-- Benchmarking reports
-- Health check services
-- Success metrics tracking
-
-**Ease of Adoption:**
-- User interface intuitiveness
-- Learning curve assessment
-- Change management support
-- User adoption tracking
-- Champion/power user programs
-
-Provide your assessment in JSON format:
-{{
-  "score": <float 0-5, where 5 is excellent support>,
-  "implementation_timeline": "Estimated timeline with assumptions",
-  "support_availability": "24/7|business-hours|limited - brief details",
-  "training_quality": "excellent|good|basic|limited - brief assessment",
-  "sla_commitment": "strong|moderate|weak|unclear - key details",
-  "adoption_complexity": "low|medium|high - brief explanation",
-  "notes": "Key insights about support and adoption readiness"
-}}"""
+Return JSON: {{"implementation_findings": ["finding1", "finding2", ...]}}
+"""
         
         try:
-            result = self._call_llm_json(user_prompt, system_prompt)
+            self.emit_event("agent_thinking", {"action": "Analyzing implementation with LLM"})
+            result = self._call_llm_json(prompt, "You are a customer success expert. Return valid JSON only.")
+            impl_findings = result.get("implementation_findings", [])
             
-            # Ensure required fields
-            if "score" not in result:
-                result["score"] = 2.5
-            if "notes" not in result:
-                result["notes"] = "Support information not available"
-            
-            # Ensure score is a number
-            try:
-                result["score"] = float(result["score"])
-            except (ValueError, TypeError):
-                result["score"] = 2.5
-            
-            print(f"[{self.name}] Adoption evaluation complete for {company_name}: {result['score']}/5")
-            return result
-            
+            if impl_findings:
+                findings.extend(impl_findings)
+            else:
+                findings.append("Implementation timeline not clearly documented - estimate 3-6 months for mid-size deployment")
+                self.add_ambiguity("Implementation timeline requires vendor consultation for accurate estimate")
+        
         except Exception as e:
-            print(f"[{self.name}] Error: {e}")
-            return {
-                "score": 2.5,
-                "notes": "Unable to complete support assessment"
-            }
+            print(f"[{self.name}] Error analyzing implementation: {e}")
+            findings.append("Unable to determine implementation timeline")
+        
+        return findings
+    
+    def _analyze_support(self, info: str, vendor_name: str) -> List[str]:
+        """Analyze support availability and SLAs."""
+        findings = []
+        
+        prompt = f"""Analyze {vendor_name}'s customer support:
 
+{info[:3000]}
+
+Identify:
+1. Support availability (24/7, business hours)
+2. Support channels (phone, email, chat, portal)
+3. SLA response times for different severities
+4. Premium support options
+5. Regional support coverage
+
+Return JSON: {{"support_findings": ["finding1", "finding2", ...]}}
+"""
+        
+        try:
+            self.emit_event("agent_thinking", {"action": "Analyzing support with LLM"})
+            result = self._call_llm_json(prompt, "You are a customer success expert. Return valid JSON only.")
+            support_findings = result.get("support_findings", [])
+            
+            if support_findings:
+                findings.extend(support_findings)
+            else:
+                findings.append("Support details not clearly documented")
+                self.add_ambiguity("Support SLAs and availability require clarification from vendor")
+        
+        except Exception as e:
+            print(f"[{self.name}] Error analyzing support: {e}")
+            findings.append("Unable to verify support options")
+        
+        return findings
+    
+    def _analyze_training(self, info: str, vendor_name: str) -> List[str]:
+        """Analyze training resources and documentation."""
+        findings = []
+        
+        prompt = f"""Analyze {vendor_name}'s training and documentation:
+
+{info[:3000]}
+
+Identify:
+1. Documentation quality and completeness
+2. Online training courses/platforms
+3. Certification programs
+4. Video tutorials
+5. Knowledge base/help center
+6. API documentation
+
+Return JSON: {{"training_findings": ["finding1", "finding2", ...]}}
+"""
+        
+        try:
+            self.emit_event("agent_thinking", {"action": "Analyzing training with LLM"})
+            result = self._call_llm_json(prompt, "You are a training specialist. Return valid JSON only.")
+            training_findings = result.get("training_findings", [])
+            
+            if training_findings:
+                findings.extend(training_findings)
+            else:
+                findings.append("Training resources not well documented")
+        
+        except Exception as e:
+            print(f"[{self.name}] Error analyzing training: {e}")
+            findings.append("Unable to assess training resources")
+        
+        return findings
+    
+    def _analyze_community(self, info: str, vendor_name: str) -> List[str]:
+        """Analyze community and ecosystem."""
+        findings = []
+        
+        prompt = f"""Analyze {vendor_name}'s user community and ecosystem:
+
+{info[:3000]}
+
+Identify:
+1. User community forums/groups
+2. Partner ecosystem size
+3. Marketplace/app directory
+4. Third-party integrations availability
+5. Developer community
+
+Return JSON: {{"community_findings": ["finding1", "finding2", ...]}}
+"""
+        
+        try:
+            result = self._call_llm_json(prompt, "You are an ecosystem analyst. Return valid JSON only.")
+            community_findings = result.get("community_findings", [])
+            
+            if community_findings:
+                findings.extend(community_findings)
+            else:
+                findings.append("Community and ecosystem information limited")
+        
+        except Exception as e:
+            print(f"[{self.name}] Error analyzing community: {e}")
+        
+        return findings
+    
+    def _extract_timeline(self, impl_findings: List[str]) -> str:
+        """Extract implementation timeline from findings."""
+        import re
+        findings_text = " ".join(impl_findings)
+        
+        # Look for time mentions
+        months_match = re.search(r'(\d+)[-–](\d+)?\s*months?', findings_text, re.IGNORECASE)
+        if months_match:
+            low = months_match.group(1)
+            high = months_match.group(2) if months_match.group(2) else low
+            return f"{low}-{high} months"
+        
+        weeks_match = re.search(r'(\d+)[-–](\d+)?\s*weeks?', findings_text, re.IGNORECASE)
+        if weeks_match:
+            low = weeks_match.group(1)
+            high = weeks_match.group(2) if weeks_match.group(2) else low
+            return f"{low}-{high} weeks"
+        
+        return "3-6 months (estimated)"
+    
+    def _calculate_adoption_score(self, findings: List[str]) -> float:
+        """Calculate adoption score based on support/training quality."""
+        if not findings:
+            return 2.0
+        
+        positive_keywords = [
+            "24/7", "comprehensive", "excellent", "extensive", "robust", "available",
+            "certification", "training", "documentation", "community", "support"
+        ]
+        negative_keywords = ["limited", "not", "unable", "unclear", "unavailable", "poor"]
+        
+        positive_count = sum(1 for f in findings if any(kw in f.lower() for kw in positive_keywords))
+        negative_count = sum(1 for f in findings if any(kw in f.lower() for kw in negative_keywords))
+        
+        score = (positive_count - negative_count * 0.5) / len(findings) * 5.0
+        return max(1.0, min(5.0, score))
+    
+    def _generate_adoption_notes(self, findings: List[str], vendor_name: str) -> str:
+        """Generate summary notes."""
+        if len(self.sources) == 0:
+            return f"Limited adoption information available for {vendor_name}. Support, training, and implementation details require direct vendor consultation."
+        
+        return f"Adoption assessment based on {len(self.sources)} sources. {len(findings)} factors evaluated. Training and support resources {'well-documented' if len(self.sources) >= 3 else 'partially documented'}. Confidence: {self._calculate_confidence()}"

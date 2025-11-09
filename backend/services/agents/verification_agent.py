@@ -9,14 +9,15 @@ from typing import Dict, Any
 class VerificationAgent(BaseAgent):
     """Agent 2: Verification Agent"""
     
-    def __init__(self):
-        super().__init__("Verification Agent", "Fact Checker")
+    def __init__(self, event_callback=None):
+        super().__init__("VerificationAgent", "Fact Checker", event_callback)
     
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Verify vendor information against website.
         """
         vendor = context.get("vendor", {})
+        self.emit_event("agent_start", {"status": "starting"})
         
         company_name = vendor.get("name", "")
         website = vendor.get("website", "")
@@ -65,6 +66,7 @@ Provide your assessment in JSON format:
                 }
             
             print(f"[{self.name}] Verification complete for {company_name}")
+            self.emit_event("agent_complete", {"status": "completed"})
             return result
             
         except Exception as e:

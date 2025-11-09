@@ -1,19 +1,36 @@
 """
 Base agent class for all workflow agents
+Enhanced with structured outputs and event emission for SSE streaming
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional, Callable
 from services.nemotron_client import get_nemotron_client
 import json
+from datetime import datetime
 
 
 class BaseAgent(ABC):
-    """Base class for all agents"""
+    """
+    Base class for all agents with structured outputs and event emission.
     
-    def __init__(self, name: str, role: str):
+    Output Schema:
+    {
+        "score": float (0-5),
+        "findings": List[str],
+        "notes": str,
+        "sources": List[{url, title, excerpt, credibility, accessed_at}],
+        "ambiguities": List[str],
+        "confidence": str ("high", "medium", "low")
+    }
+    """
+    
+    def __init__(self, name: str, role: str, event_callback: Optional[Callable] = None):
         self.name = name
         self.role = role
         self.client = get_nemotron_client()
+        self.event_callback = event_callback  # For SSE streaming
+        self.sources: List[Dict[str, Any]] = []
+        self.ambiguities: List[str] = []
     
     @abstractmethod
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -24,9 +41,140 @@ class BaseAgent(ABC):
             context: Context dictionary with vendor data, documents, etc.
         
         Returns:
-            Agent output dictionary
+            Structured agent output dictionary
         """
         pass
+    
+    def emit_event(self, event_type: str, data: Dict[str, Any]):
+        """
+        Emit an event for SSE streaming (if callback is set).
+        
+        Args:
+            event_type: Type of event (agent_start, agent_thinking, agent_progress, agent_complete)
+            data: Event data dictionary
+        """
+        if self.event_callback:
+            try:
+                event_data = {
+                    "agent_name": self.name,
+                    "role": self.role,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    **data
+                }
+                self.event_callback(event_type, event_data)
+            except Exception as e:
+                print(f"[{self.name}] Error emitting event: {e}")
+    
+    def create_structured_output(
+        self,
+        score: float,
+        findings: List[str],
+        notes: str = "",
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Create standardized agent output with sources and confidence.
+        
+        Args:
+            score: Numeric score (0-5)
+            findings: List of key findings
+            notes: Additional notes/summary
+            **kwargs: Additional agent-specific fields
+        
+        Returns:
+            Structured output dictionary
+        """
+        # Calculate confidence based on sources
+        confidence = self._calculate_confidence()
+        
+        output = {
+            "score": round(score, 2),
+            "findings": findings,
+            "notes": notes,
+            "sources": self.sources,
+            "ambiguities": self.ambiguities,
+            "confidence": confidence,
+            **kwargs
+        }
+        
+        return output
+    
+    def _calculate_confidence(self) -> str:
+        """Calculate confidence level based on sources."""
+        if not self.sources:
+            return "low"
+        
+        official_count = sum(1 for s in self.sources if s.get("credibility") == "official")
+        total_count = len(self.sources)
+        
+        if official_count >= 2 and total_count >= 3:
+            return "high"
+        elif official_count >= 1 or total_count >= 2:
+            return "medium"
+        else:
+            return "low"
+    
+    def add_source(self, source: Dict[str, Any]):
+        """Add a source to the agent's source list."""
+        self.sources.append(source)
+    
+    def add_ambiguity(self, ambiguity: str):
+        """Add an ambiguity/assumption to document."""
+        self.ambiguities.append(ambiguity)
+    
+    def research_requirement(
+        self,
+        requirement_query: str,
+        vendor_name: str,
+        vendor_website: str,
+        context_description: str = ""
+    ) -> str:
+        """
+        Research a specific requirement using multi-step RAG.
+        
+        Args:
+            requirement_query: Specific query (e.g., "ServiceNow SAML SSO Okta support")
+            vendor_name: Vendor name
+            vendor_website: Vendor website
+            context_description: Additional context for the search
+        
+        Returns:
+            Summary text of findings
+        """
+        self.emit_event("agent_progress", {
+            "action": "researching",
+            "query": requirement_query
+        })
+        
+        # Use enhanced search
+        sources = self.client.search_with_followup(
+            initial_query=requirement_query,
+            vendor_name=vendor_name,
+            base_website=vendor_website,
+            max_hops=3
+        )
+        
+        # Add sources to agent's source list
+        for source in sources:
+            self.add_source(source)
+        
+        self.emit_event("agent_progress", {
+            "action": "sources_discovered",
+            "count": len(sources),
+            "urls": [s["url"] for s in sources[:3]]
+        })
+        
+        # Synthesize findings from sources
+        if not sources:
+            return f"No accessible documentation found for: {requirement_query}"
+        
+        # Combine excerpts for analysis
+        combined_content = "\n\n".join([
+            f"[Source {i+1} - {s['credibility']}]: {s['excerpt']}"
+            for i, s in enumerate(sources[:5])
+        ])
+        
+        return combined_content
     
     def _call_llm(self, prompt: str, system_prompt: str = None) -> str:
         """Helper method to call Nemotron LLM"""
