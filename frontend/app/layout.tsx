@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import Header from '@/components/Header'
+import Footer from '@/components/Footer'
+import { ToastProvider } from '@/lib/ToastProvider'
 
 export const metadata: Metadata = {
   title: 'VendorLens - Secure & Intelligent Vendor Onboarding',
@@ -15,10 +17,13 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body>
-        <Header />
-        <main className="pt-16">
-          {children}
-        </main>
+        <ToastProvider>
+          <Header />
+          <main className="pt-16 min-h-screen">
+            {children}
+          </main>
+          <Footer />
+        </ToastProvider>
       </body>
     </html>
   )
