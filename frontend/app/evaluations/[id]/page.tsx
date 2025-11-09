@@ -6,19 +6,9 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import axios from 'axios'
+import api from '@/lib/api'
+import type { Evaluation } from '@/lib/types'
 import Card from '@/components/ui/Card'
-
-interface Evaluation {
-  id: string
-  type: string
-  name: string
-  status: string
-  vendors?: any[]
-  recommendation?: any
-  onboarding_checklist?: string[]
-  error?: string
-}
 
 export default function EvaluationPage() {
   const params = useParams()
@@ -29,10 +19,8 @@ export default function EvaluationPage() {
   useEffect(() => {
     const fetchEvaluation = async () => {
       try {
-        const response = await axios.get(
-          `${process.env.NEXT_PUBLIC_API_URL}/evaluations/${evaluationId}`
-        )
-        setEvaluation(response.data)
+        const data = await api.getEvaluation(evaluationId)
+        setEvaluation(data)
       } catch (error) {
         console.error('Error fetching evaluation:', error)
       } finally {
