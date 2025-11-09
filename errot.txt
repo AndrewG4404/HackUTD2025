@@ -1,13 +1,3 @@
-andrewgonzalez@Andrews-MacBook-Air HackUTD2025 % ./START_SERVERS.sh
-
-╔══════════════════════════════════════════════════════════════╗
-║       VendorLens - Starting Backend & Frontend Servers      ║
-╚══════════════════════════════════════════════════════════════╝
-
-⚠️  Warning: backend/.env file not found!
-Please create backend/.env with MongoDB and Nemotron credentials
-andrewgonzalez@Andrews-MacBook-Air HackUTD2025 % 
-
 # Backend Configuration
 BACKEND_PORT=8000
 BACKEND_HOST=0.0.0.0
@@ -17,9 +7,8 @@ MONGODB_URI=mongodb+srv://admin:48aX6qgzAjf9uZ2Y@hackutd2025.3wkesnl.mongodb.net
 MONGODB_DB_NAME=vendorlens
 
 # Nemotron API Configuration
-NEMOTRON_API_URL="https://integrate.api.nvidia.com/v1"
-NEMOTRON_API_KEY="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"
-NEMOTRON_MODEL=nvidia/nvidia-nemotron-nano-9b-v2
+NEMOTRON_API_URL=https://integrate.api.nvidia.com/v1
+NEMOTRON_API_KEY=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
 
 # File Upload Configuration
 UPLOAD_DIR=uploads

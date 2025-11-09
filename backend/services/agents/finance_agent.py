@@ -21,9 +21,9 @@ class FinanceAgent(BaseAgent):
     def __init__(self, event_callback=None):
         super().__init__("FinanceAgent", "Finance Analyst", event_callback)
     
-    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Evaluate pricing and TCO using enhanced RAG.
+        Evaluate pricing and TCO using single comprehensive search.
         """
         vendor = context.get("vendor", {})
         evaluation = context.get("evaluation", {})
@@ -39,34 +39,24 @@ class FinanceAgent(BaseAgent):
         
         findings = []
         
-        # 1. Pricing model and list prices
-        self.emit_event("agent_thinking", {"action": "Researching pricing"})
-        pricing_info = self.research_requirement(
-            f"{company_name} pricing plans cost per user enterprise pricing",
+        # ONE comprehensive pricing query
+        self.emit_event("agent_thinking", {"action": "Researching comprehensive pricing"})
+        finance_info = await self.research_requirement(
+            f"{company_name} pricing plans cost per user enterprise pricing "
+            f"implementation cost setup fees professional services "
+            f"support plans premium support training costs TCO total cost ownership",
             company_name,
             website
         )
-        pricing_findings = self._analyze_pricing(pricing_info, company_name, user_count)
+        
+        # Analyze all aspects from the single search
+        pricing_findings = self._analyze_pricing(finance_info, company_name, user_count)
         findings.extend(pricing_findings)
         
-        # 2. Implementation and hidden costs
-        self.emit_event("agent_thinking", {"action": "Researching implementation costs"})
-        implementation_info = self.research_requirement(
-            f"{company_name} implementation cost setup fees professional services",
-            company_name,
-            website
-        )
-        impl_findings = self._analyze_implementation_costs(implementation_info, company_name)
+        impl_findings = self._analyze_implementation_costs(finance_info, company_name)
         findings.extend(impl_findings)
         
-        # 3. Support and training costs
-        self.emit_event("agent_thinking", {"action": "Researching support costs"})
-        support_info = self.research_requirement(
-            f"{company_name} support plans premium support training costs",
-            company_name,
-            website
-        )
-        support_findings = self._analyze_support_costs(support_info, company_name)
+        support_findings = self._analyze_support_costs(finance_info, company_name)
         findings.extend(support_findings)
         
         # Calculate estimated TCO
@@ -78,11 +68,21 @@ class FinanceAgent(BaseAgent):
         # Generate notes
         notes = self._generate_finance_notes(findings, company_name, tco_estimate, user_count)
         
+        # Generate management-friendly summary
+        summary = self._generate_executive_summary(findings, score, company_name, tco_estimate, user_count)
+        
+        # Extract key strengths and risks
+        strengths = [f for f in findings if any(kw in f.lower() for kw in ["competitive", "transparent", "volume discount", "flexible", "included"])][:4]
+        risks = [f for f in findings if any(kw in f.lower() for kw in ["not available", "hidden", "additional", "requires quote", "unclear"])][:4]
+        
         # Create structured output
         output = self.create_structured_output(
             score=score,
             findings=findings,
             notes=notes,
+            summary=summary,
+            strengths=strengths,
+            risks=risks,
             pricing_model=self._extract_pricing_model(pricing_findings),
             estimated_tco=tco_estimate
         )
@@ -90,6 +90,7 @@ class FinanceAgent(BaseAgent):
         self.emit_event("agent_complete", {
             "status": "completed",
             "score": score,
+            "summary": summary,
             "tco_estimate": tco_estimate,
             "sources_count": len(self.sources)
         })
@@ -98,6 +99,9 @@ class FinanceAgent(BaseAgent):
     
     def _extract_user_count(self, use_case: str) -> int:
         """Extract user count from use case, default to 300."""
+        if not use_case:
+            return 300  # Default for application workflow
+        
         import re
         match = re.search(r'(\d+)[-–](\d+)\s*users', use_case.lower())
         if match:
@@ -294,3 +298,21 @@ Return JSON: {{"support_findings": ["finding1", "finding2", ...]}}
             return f"Pricing information for {vendor_name} not publicly available. Estimated 3-year TCO: ${tco_val:,} (~${per_user_monthly}/user/month for {user_count} users) based on industry averages. Recommend requesting formal quote."
         
         return f"3-year TCO estimate: ${tco_val:,} (~${per_user_monthly}/user/month for {user_count} users). Based on {len(self.sources)} sources. {len(findings)} cost factors identified. Confidence: {self._calculate_confidence()}"
+    
+    def _generate_executive_summary(self, findings: List[str], score: float, vendor_name: str, tco: Dict[str, Any], user_count: int) -> str:
+        """Generate a 2-3 sentence executive summary suitable for management."""
+        tco_val = tco["three_year_total"]
+        per_user_monthly = tco["per_user_per_month_estimate"]
+        year1_total = tco["year1"]["total"]
+        
+        if score >= 4.0:
+            return f"{vendor_name} offers competitive pricing at ~${per_user_monthly}/user/month (${tco_val:,} 3-year TCO for {user_count} users). Transparent pricing model with Year 1 total of ${year1_total:,} including implementation."
+        elif score >= 3.0:
+            return f"{vendor_name} pricing is within market range at ~${per_user_monthly}/user/month (${tco_val:,} 3-year TCO). Some cost details require vendor quote, but overall financial profile is acceptable for {user_count}-user deployment."
+        elif score >= 2.0:
+            return f"{vendor_name} pricing lacks transparency with estimated ${tco_val:,} 3-year TCO based on industry averages. Year 1 costs (${year1_total:,}) include estimated implementation fees; formal quote required for budgeting."
+        else:
+            if len(self.sources) == 0:
+                return f"Pricing information for {vendor_name} is not publicly available. Based on industry benchmarks for similar solutions, estimated 3-year TCO is ${tco_val:,} (~${per_user_monthly}/user/month for {user_count} users). Formal quote must be obtained for accurate budgeting."
+            else:
+                return f"{vendor_name} pricing structure is unclear or appears uncompetitive at estimated ~${per_user_monthly}/user/month. Hidden costs and setup fees may significantly impact TCO beyond the ${tco_val:,} estimate. Recommend exploring alternatives or negotiating volume pricing."

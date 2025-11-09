@@ -21,9 +21,9 @@ class ComplianceAgent(BaseAgent):
     def __init__(self, event_callback=None):
         super().__init__("ComplianceAgent", "Compliance Officer", event_callback)
     
-    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Evaluate compliance using enhanced RAG with multi-step research.
+        Evaluate compliance using single comprehensive search (saves API quota).
         """
         vendor = context.get("vendor", {})
         company_name = vendor.get("name", "Unknown")
@@ -32,47 +32,31 @@ class ComplianceAgent(BaseAgent):
         print(f"[{self.name}] Analyzing compliance for {company_name}...")
         self.emit_event("agent_start", {"status": "starting", "vendor": company_name})
         
-        # Research compliance requirements systematically
+        # Single comprehensive compliance search (instead of 4 separate searches)
         findings = []
         
-        # 1. Security Certifications
-        self.emit_event("agent_thinking", {"action": "Researching security certifications"})
-        cert_info = self.research_requirement(
-            f"{company_name} SOC2 ISO27001 ISO27017 ISO27018 security certifications",
+        # ONE comprehensive compliance query
+        self.emit_event("agent_thinking", {"action": "Researching comprehensive compliance"})
+        compliance_info = await self.research_requirement(
+            f"{company_name} SOC2 ISO27001 ISO27017 ISO27018 security certifications "
+            f"GDPR CCPA HIPAA privacy compliance data protection "
+            f"data retention policy data deletion data ownership "
+            f"SSO SAML encryption audit logs RBAC MFA",
             company_name,
             website
         )
-        cert_findings = self._analyze_certifications(cert_info, company_name)
+        
+        # Analyze all aspects from the single search
+        cert_findings = self._analyze_certifications(compliance_info, company_name)
         findings.extend(cert_findings)
         
-        # 2. Privacy & Regulatory Compliance
-        self.emit_event("agent_thinking", {"action": "Researching privacy compliance"})
-        privacy_info = self.research_requirement(
-            f"{company_name} GDPR CCPA HIPAA privacy compliance data protection",
-            company_name,
-            website
-        )
-        privacy_findings = self._analyze_privacy(privacy_info, company_name)
+        privacy_findings = self._analyze_privacy(compliance_info, company_name)
         findings.extend(privacy_findings)
         
-        # 3. Data Handling & Retention
-        self.emit_event("agent_thinking", {"action": "Researching data handling policies"})
-        data_info = self.research_requirement(
-            f"{company_name} data retention policy data deletion data ownership customer data",
-            company_name,
-            website
-        )
-        data_findings = self._analyze_data_handling(data_info, company_name)
+        data_findings = self._analyze_data_handling(compliance_info, company_name)
         findings.extend(data_findings)
         
-        # 4. Security Features (SSO, Encryption, Audit Logs)
-        self.emit_event("agent_thinking", {"action": "Researching security features"})
-        security_info = self.research_requirement(
-            f"{company_name} SSO SAML encryption audit logs role-based access control RBAC",
-            company_name,
-            website
-        )
-        security_findings = self._analyze_security_features(security_info, company_name)
+        security_findings = self._analyze_security_features(compliance_info, company_name)
         findings.extend(security_findings)
         
         # Calculate score based on findings
@@ -81,16 +65,27 @@ class ComplianceAgent(BaseAgent):
         # Generate comprehensive notes
         notes = self._generate_compliance_notes(findings, company_name)
         
+        # Generate management-friendly summary
+        summary = self._generate_executive_summary(findings, score, company_name)
+        
+        # Extract key strengths and risks for quick scanning
+        strengths = [f for f in findings if any(kw in f.lower() for kw in ["certified", "compliant", "supports", "provides"])][:4]
+        risks = [f for f in findings if any(kw in f.lower() for kw in ["not", "unable", "unclear", "unavailable", "no"])][:4]
+        
         # Create structured output
         output = self.create_structured_output(
             score=score,
             findings=findings,
-            notes=notes
+            notes=notes,
+            summary=summary,
+            strengths=strengths,
+            risks=risks
         )
         
         self.emit_event("agent_complete", {
             "status": "completed",
             "score": score,
+            "summary": summary,
             "findings_count": len(findings),
             "sources_count": len(self.sources)
         })
@@ -260,3 +255,21 @@ Return JSON: {{"security_features": ["feature1", "feature2", ...]}}
             return f"Compliance evaluation based on {len(official_sources)} official sources. {len(findings)} specific findings documented. Confidence: {self._calculate_confidence()}"
         else:
             return f"Compliance evaluation based on {len(self.sources)} sources ({len(official_sources)} official). {len(findings)} findings. Additional verification recommended."
+    
+    def _generate_executive_summary(self, findings: List[str], score: float, vendor_name: str) -> str:
+        """Generate a 2-3 sentence executive summary suitable for management."""
+        # Count positive vs negative findings
+        positive = [f for f in findings if any(kw in f.lower() for kw in ["certified", "compliant", "supports", "provides", "available"])]
+        negative = [f for f in findings if any(kw in f.lower() for kw in ["not", "unable", "unclear", "unavailable", "no"])]
+        
+        if score >= 4.0:
+            return f"{vendor_name} demonstrates strong compliance posture with {len(positive)} verified security controls and certifications. Documentation is comprehensive and confidence is high for enterprise deployment."
+        elif score >= 3.0:
+            return f"{vendor_name} meets basic compliance requirements with {len(positive)} documented controls, though {len(negative)} gaps require clarification before deployment in a regulated environment."
+        elif score >= 2.0:
+            return f"{vendor_name} shows limited compliance documentation with only {len(positive)} verified controls and {len(negative)} significant gaps. Formal security review required before consideration."
+        else:
+            if len(self.sources) == 0:
+                return f"Could not verify compliance posture for {vendor_name} from accessible documentation. Formal security and compliance pack (SOC 2, ISO 27001, DPA) must be requested directly from vendor."
+            else:
+                return f"{vendor_name} compliance posture is concerning with {len(negative)} documented gaps and minimal verifiable security controls. Not recommended for regulated financial services without substantial remediation."

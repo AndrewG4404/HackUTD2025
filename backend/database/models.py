@@ -55,12 +55,57 @@ class RequirementProfile(BaseModel):
     critical_requirements: List[str] = []
     nice_to_haves: List[str] = []
     compliance_expectations: List[str] = []
+    dimension_importance: Optional[Dict[str, int]] = None  # Inferred from use case
+    integration_targets: List[str] = []
+    scale_assumptions: Optional[Dict[str, Any]] = None
 
 
 class Recommendation(BaseModel):
     """Recommendation model"""
     vendor_id: str
     reason: str
+
+
+class DimensionAnalysis(BaseModel):
+    """Analysis for a single dimension (security, interoperability, etc.)"""
+    summary: str
+    strengths: List[str] = []
+    gaps: List[str] = []
+    risks: Optional[List[str]] = None
+    high_level_numbers: Optional[Dict[str, str]] = None  # For finance dimension
+
+
+class VendorAnalysis(BaseModel):
+    """Detailed analysis for a single vendor"""
+    overview: str
+    security: Optional[DimensionAnalysis] = None
+    interoperability: Optional[DimensionAnalysis] = None
+    finance: Optional[DimensionAnalysis] = None
+    adoption: Optional[DimensionAnalysis] = None
+    key_strengths: List[str] = []
+    key_risks: List[str] = []
+
+
+class ComparisonAnalysis(BaseModel):
+    """Side-by-side comparison between vendors"""
+    security: Optional[str] = None
+    interoperability: Optional[str] = None
+    cost: Optional[str] = None
+    adoption: Optional[str] = None
+
+
+class FinalRecommendation(BaseModel):
+    """Final recommendation with detailed reasoning"""
+    recommended_vendor_id: str
+    short_reason: str
+    detailed_reason: str
+
+
+class Analysis(BaseModel):
+    """Complete Goldman-style analysis with narrative"""
+    per_vendor: Dict[str, VendorAnalysis] = {}
+    comparison: Optional[ComparisonAnalysis] = None
+    final_recommendation: Optional[FinalRecommendation] = None
 
 
 class Evaluation(BaseModel):
@@ -71,10 +116,11 @@ class Evaluation(BaseModel):
     use_case: Optional[str] = None  # null for application workflow
     created_at: datetime = Field(default_factory=datetime.utcnow)
     status: str = "pending"  # "pending" | "running" | "completed" | "failed"
-    weights: Optional[Weights] = None  # assessment only
+    weights: Optional[Weights] = None  # assessment only (legacy, overridden by dimension_importance)
     requirement_profile: Optional[RequirementProfile] = None  # assessment only
     vendors: List[Vendor] = []
     recommendation: Optional[Recommendation] = None
+    analysis: Optional[Analysis] = None  # Goldman-style detailed analysis
     onboarding_checklist: List[str] = []
     error: Optional[str] = None
 

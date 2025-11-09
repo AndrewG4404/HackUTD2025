@@ -45,19 +45,24 @@ export default function AssessPage() {
   // Fetch evaluations for dashboard stats
   useEffect(() => {
     const fetchEvaluations = async () => {
+      if (showForm) return // Don't fetch if showing form
+      
+      setDashboardLoading(true)
       try {
+        console.log('[Assess] Fetching evaluations for dashboard...')
         const data = await api.listEvaluations()
+        console.log('[Assess] Fetched evaluations:', data.length)
         setEvaluations(data)
       } catch (error) {
-        console.error('Error fetching evaluations:', error)
+        console.error('[Assess] Error fetching evaluations:', error)
+        // Set empty array on error so UI shows "no assessments"
+        setEvaluations([])
       } finally {
         setDashboardLoading(false)
       }
     }
     
-    if (!showForm) {
-      fetchEvaluations()
-    }
+    fetchEvaluations()
   }, [showForm])
 
   // Calculate dashboard stats from actual data
@@ -97,18 +102,20 @@ export default function AssessPage() {
         })),
       }
 
+      console.log('[Assess] Creating assessment...')
       const response = await api.createAssessment(assessmentData)
       const evaluationId = response.id
+      console.log('[Assess] Assessment created:', evaluationId)
 
-      await api.runAssessmentWorkflow(evaluationId)
-
+      // Don't set loading to false before redirect - let the page change happen
+      // The SSE stream will auto-trigger when the evaluation detail page connects
+      console.log('[Assess] Redirecting to evaluation page...')
       router.push(`/evaluations/${evaluationId}`)
     } catch (error) {
-      console.error('Error creating assessment:', error)
+      console.error('[Assess] Error creating assessment:', error)
       const errorMessage = error instanceof Error ? error.message : 'Error creating assessment. Please try again.'
       alert(errorMessage)
-    } finally {
-      setLoading(false)
+      setLoading(false) // Only set loading false on error
     }
   }
 

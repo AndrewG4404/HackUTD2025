@@ -10,7 +10,12 @@ import os
 from pathlib import Path
 
 # Load environment variables
+# 1) Load backend/.env (working directory)
 load_dotenv()
+# 2) Load project root .env to allow rotated keys there to override
+root_env_path = (Path(__file__).resolve().parent.parent / ".env")
+if root_env_path.exists():
+    load_dotenv(dotenv_path=root_env_path, override=True)
 
 # Import routers
 from api.routes import core, workflows, health, docs

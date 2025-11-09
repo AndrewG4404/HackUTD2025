@@ -71,6 +71,10 @@ export default function EvaluationPage() {
   const isRunning = evaluation.status === 'pending' || evaluation.status === 'running'
   const isCompleted = evaluation.status === 'completed'
   const isFailed = evaluation.status === 'failed'
+  
+  // Show workflow visualization for pending, running, AND if recently completed (within 2 mins)
+  const showWorkflow = isRunning || (isCompleted && evaluation.updated_at && 
+    (Date.now() - new Date(evaluation.updated_at).getTime()) < 120000)
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] py-12">
@@ -91,8 +95,8 @@ export default function EvaluationPage() {
           </div>
         </div>
         
-        {/* Live Workflow Visualization - Show when running */}
-        {isRunning && (
+        {/* Live Workflow Visualization - Show when running OR just completed */}
+        {showWorkflow && (
           <div className="mb-8">
             <WorkflowVisualization 
               evaluationId={evaluationId} 
@@ -200,24 +204,65 @@ export default function EvaluationPage() {
 
             {evaluation.type === 'assessment' && (
               <div className="space-y-6">
-                {evaluation.recommendation && (
-                  <Card>
-                    <div className="flex items-center mb-4">
-                      <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center mr-4">
-                        <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                {/* Rich Recommendation Card */}
+                {evaluation.recommendation && evaluation.analysis?.final_recommendation && (() => {
+                  const finalRec = evaluation.analysis.final_recommendation;
+                  const hasRecommendation = finalRec.recommended_vendor_id && finalRec.recommended_vendor_id !== '';
+                  const recommendedVendor = evaluation.vendors?.find((v: any) => v.id === finalRec.recommended_vendor_id);
+                  
+                  return hasRecommendation ? (
+                    // Green card for clear recommendation
+                    <div className="rounded-xl border border-emerald-500/60 bg-emerald-900/10 p-6">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-12 h-12 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                          <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-emerald-400 uppercase mb-1">
+                            AI-powered recommendation
+                          </div>
+                          <div className="text-lg font-semibold text-emerald-100">
+                            Recommended: {recommendedVendor?.name || finalRec.recommended_vendor_id}
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <h2 className="text-xl font-semibold text-green-400">Recommended: {evaluation.recommendation.vendor_id}</h2>
-                        <p className="text-sm text-gray-400">AI-powered recommendation</p>
+                      <p className="text-sm text-emerald-50 mb-3">
+                        {finalRec.detailed_reason || finalRec.short_reason}
+                      </p>
+                      {finalRec.key_tradeoffs && finalRec.key_tradeoffs.length > 0 && (
+                        <ul className="text-xs text-emerald-100 list-disc list-inside space-y-1">
+                          {finalRec.key_tradeoffs.map((tradeoff: string, i: number) => (
+                            <li key={i}>{tradeoff}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ) : (
+                    // Amber card for insufficient data
+                    <div className="rounded-xl border border-amber-500/60 bg-amber-900/10 p-6">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                          <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-amber-400 uppercase mb-1">
+                            AI-powered analysis
+                          </div>
+                          <div className="text-lg font-semibold text-amber-100">
+                            No safe recommendation (insufficient compliance data)
+                          </div>
+                        </div>
                       </div>
+                      <p className="text-sm text-amber-50">
+                        {finalRec.detailed_reason || evaluation.recommendation.reason || 'Could not retrieve enough trustworthy documentation to make a compliance-safe recommendation. Formal security and compliance packs must be obtained from vendors before selection.'}
+                      </p>
                     </div>
-                    <div className="bg-[#0f0f0f] rounded-lg p-4 border border-green-500/20">
-                      <p className="text-gray-300">{evaluation.recommendation.reason || evaluation.recommendation}</p>
-                    </div>
-                  </Card>
-                )}
+                  );
+                })()}
 
                 <Card>
                   <h2 className="text-2xl font-semibold mb-6 text-white">Vendor Comparison</h2>
@@ -275,6 +320,105 @@ export default function EvaluationPage() {
                     </div>
                   )}
                 </Card>
+
+                {/* Per-Vendor Detail Cards */}
+                {evaluation.analysis?.per_vendor && evaluation.vendors && evaluation.vendors.length > 0 && (
+                  <div className="space-y-6">
+                    <h2 className="text-2xl font-semibold text-white">Detailed Vendor Analysis</h2>
+                    {evaluation.vendors.map((vendor: any) => {
+                      const vendorAnalysis = evaluation.analysis.per_vendor[vendor.id];
+                      if (!vendorAnalysis) return null;
+                      
+                      return (
+                        <div key={vendor.id} className="rounded-xl border border-slate-700 bg-slate-900/60 p-6">
+                          {/* Vendor Header */}
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <div className="text-xs uppercase text-slate-400">Vendor</div>
+                              <div className="text-xl font-semibold text-slate-50 mt-1">
+                                {vendor.name}
+                              </div>
+                              <a
+                                href={vendor.website}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-cyan-300 underline hover:text-cyan-200"
+                              >
+                                {vendor.website}
+                              </a>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs uppercase text-slate-400">Overall</div>
+                              <div className="text-3xl font-bold text-white mt-1">
+                                {vendor.total_score?.toFixed(1) ?? '—'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Vendor Headline */}
+                          {vendorAnalysis.headline && (
+                            <p className="text-sm text-slate-100 mb-4 pb-4 border-b border-slate-700">
+                              {vendorAnalysis.headline}
+                            </p>
+                          )}
+
+                          {/* 4-dimension grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {['security', 'interoperability', 'finance', 'adoption'].map(dim => {
+                              const dimData = vendorAnalysis[dim];
+                              const score = vendorAnalysis.dimension_scores?.[dim];
+                              if (!dimData) return null;
+                              
+                              return (
+                                <div key={dim} className="rounded-lg border border-slate-700/80 bg-slate-800/50 p-4">
+                                  <div className="flex justify-between items-center mb-2">
+                                    <span className="font-semibold capitalize text-slate-100">{dim}</span>
+                                    <span className="text-xs px-2 py-1 rounded-full bg-slate-700 border border-slate-600 text-slate-200">
+                                      {typeof score === 'number' ? score.toFixed(1) : '—'}/5
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-slate-200 mb-3">
+                                    {dimData.summary}
+                                  </p>
+                                  
+                                  {/* Strengths */}
+                                  {dimData.strengths && dimData.strengths.length > 0 && (
+                                    <div className="mb-2">
+                                      <div className="text-xs font-semibold text-green-400 mb-1">Strengths:</div>
+                                      <ul className="text-xs text-slate-300 space-y-0.5">
+                                        {dimData.strengths.slice(0, 2).map((s: string, i: number) => (
+                                          <li key={i} className="flex items-start gap-1">
+                                            <span className="text-green-400">✓</span>
+                                            <span>{s}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Risks/Gaps */}
+                                  {dimData.risks && dimData.risks.length > 0 && (
+                                    <div>
+                                      <div className="text-xs font-semibold text-amber-400 mb-1">Risks:</div>
+                                      <ul className="text-xs text-slate-300 space-y-0.5">
+                                        {dimData.risks.slice(0, 2).map((r: string, i: number) => (
+                                          <li key={i} className="flex items-start gap-1">
+                                            <span className="text-amber-400">⚠</span>
+                                            <span>{r}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -282,7 +426,7 @@ export default function EvaluationPage() {
               <Card>
                 <h2 className="text-2xl font-semibold mb-6 text-white">Onboarding Checklist</h2>
                 <div className="space-y-3">
-                  {evaluation.onboarding_checklist.map((item, index) => (
+                  {evaluation.onboarding_checklist.map((item: string, index: number) => (
                     <div key={index} className="flex items-start space-x-3 p-3 bg-[#0f0f0f] rounded-lg border border-gray-800">
                       <div className="flex-shrink-0 mt-1">
                         <div className="w-5 h-5 border-2 border-blue-500 rounded flex items-center justify-center">

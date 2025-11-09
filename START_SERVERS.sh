@@ -15,7 +15,32 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
+
+# Kill any existing processes on ports 8000 and 3000
+echo -e "${YELLOW}🔍 Checking for existing processes...${NC}"
+if lsof -ti:8000 > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Port 8000 is in use. Killing existing processes...${NC}"
+    lsof -ti:8000 | xargs kill -9 2>/dev/null
+    sleep 2
+    echo -e "${GREEN}✓ Port 8000 cleared${NC}"
+fi
+
+if lsof -ti:3000 > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Port 3000 is in use. Killing existing processes...${NC}"
+    lsof -ti:3000 | xargs kill -9 2>/dev/null
+    sleep 2
+    echo -e "${GREEN}✓ Port 3000 cleared${NC}"
+fi
+
+if lsof -ti:3001 > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Port 3001 is in use. Killing existing processes...${NC}"
+    lsof -ti:3001 | xargs kill -9 2>/dev/null
+    sleep 2
+    echo -e "${GREEN}✓ Port 3001 cleared${NC}"
+fi
+echo ""
 
 # Check if .env exists in backend
 if [ ! -f "$SCRIPT_DIR/backend/.env" ]; then
