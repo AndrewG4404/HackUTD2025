@@ -7,15 +7,170 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import api from '@/lib/api'
-import type { Evaluation } from '@/lib/types'
+import type { Evaluation, VendorDecision, Vendor } from '@/lib/types'
 import Card from '@/components/ui/Card'
 import { WorkflowVisualization } from '@/components/WorkflowVisualization'
+
+// Decision Badge Component
+function DecisionBadge({ decision }: { decision?: VendorDecision }) {
+  const status = decision?.status ?? 'pending'
+  const base = 'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium'
+
+  switch (status) {
+    case 'approved':
+      return <span className={`${base} bg-emerald-500/20 text-emerald-400 border border-emerald-500/30`}>✓ Approved</span>
+    case 'approved_pending_actions':
+      return (
+        <span className={`${base} bg-amber-500/20 text-amber-400 border border-amber-500/30`}>
+          ⏳ Approved – pending actions
+        </span>
+      )
+    case 'declined':
+      return <span className={`${base} bg-rose-500/20 text-rose-400 border border-rose-500/30`}>✗ Declined</span>
+    default:
+      return <span className={`${base} bg-slate-500/20 text-slate-400 border border-slate-500/30`}>⊙ Not reviewed</span>
+  }
+}
+
+// Decision Modal Component
+function DecisionModal({
+  evaluationId,
+  vendors,
+  state,
+  onClose,
+  onUpdated,
+}: {
+  evaluationId: string
+  vendors: Vendor[]
+  state: { open: boolean; vendorId: string | null; mode: 'approve_pending' | 'approve' | 'decline' | null }
+  onClose: () => void
+  onUpdated: (updatedEval: Evaluation) => void
+}) {
+  const [notes, setNotes] = useState('')
+  const [pendingActions, setPendingActions] = useState<string>('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!state.open || !state.vendorId || !state.mode) return null
+
+  const vendor = vendors.find((v) => v.id === state.vendorId)
+  if (!vendor) return null
+  
+  // TypeScript guard - vendor is guaranteed to exist here
+
+  const title =
+    state.mode === 'approve_pending'
+      ? `Approve ${vendor.name} with pending actions`
+      : state.mode === 'approve'
+      ? `Approve ${vendor.name}`
+      : `Decline ${vendor.name}`
+
+  async function handleSubmit() {
+    setLoading(true)
+    setError(null)
+    try {
+      const status: 'approved_pending_actions' | 'approved' | 'declined' =
+        state.mode === 'approve_pending'
+          ? 'approved_pending_actions'
+          : state.mode === 'approve'
+          ? 'approved'
+          : 'declined'
+
+      const payload = {
+        status,
+        notes: notes || undefined,
+        pending_actions:
+          status === 'approved_pending_actions'
+            ? pendingActions
+                .split('\n')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : [],
+      }
+
+      const updatedEval = await api.setVendorDecision(evaluationId, vendor!.id, payload)
+      onUpdated(updatedEval)
+      onClose()
+    } catch (e: any) {
+      setError(e.response?.data?.detail || e.message || 'Failed to save decision')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-xl bg-[#1a1a1a] border border-gray-800 p-6 shadow-2xl">
+        <h2 className="text-lg font-semibold mb-2 text-white">{title}</h2>
+        <p className="text-xs text-gray-400 mb-4">
+          This action captures your vendor onboarding decision for this evaluation.
+        </p>
+
+        {state.mode === 'approve_pending' && (
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-gray-300 mb-1">
+              Pending action items (one per line)
+            </label>
+            <textarea
+              className="w-full rounded-md border border-gray-700 bg-[#0f0f0f] px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+              rows={4}
+              placeholder={'Request SOC 2 Type II report\nComplete security questionnaire\nRun POC in non-prod environment'}
+              value={pendingActions}
+              onChange={(e) => setPendingActions(e.target.value)}
+            />
+          </div>
+        )}
+
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-300 mb-1">
+            Internal notes (optional)
+          </label>
+          <textarea
+            className="w-full rounded-md border border-gray-700 bg-[#0f0f0f] px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+            rows={3}
+            placeholder="e.g. Strong fit technically, awaiting formal compliance pack and fraud checks."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+
+        {error && (
+          <div className="mb-3 p-2 rounded bg-rose-500/10 border border-rose-500/30">
+            <p className="text-xs text-rose-400">{error}</p>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button
+            className="rounded-md border border-gray-700 bg-[#0f0f0f] px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 transition-colors"
+            onClick={onClose}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            onClick={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? 'Saving...' : 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function EvaluationPage() {
   const params = useParams()
   const evaluationId = params.id as string
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [loading, setLoading] = useState(true)
+  const [decisionModal, setDecisionModal] = useState<{
+    open: boolean
+    vendorId: string | null
+    mode: 'approve_pending' | 'approve' | 'decline' | null
+  }>({ open: false, vendorId: null, mode: null })
 
   const fetchEvaluation = useCallback(async () => {
     try {
@@ -47,6 +202,21 @@ export default function EvaluationPage() {
     setTimeout(() => fetchEvaluation(), 1500) // Wait a bit for DB to update
   }, [fetchEvaluation])
 
+  // Open decision modal
+  const openDecisionModal = (vendorId: string, mode: 'approve_pending' | 'approve' | 'decline') => {
+    setDecisionModal({ open: true, vendorId, mode })
+  }
+
+  // Close decision modal
+  const closeDecisionModal = () => {
+    setDecisionModal({ open: false, vendorId: null, mode: null })
+  }
+
+  // Handle decision update
+  const handleDecisionUpdate = (updatedEval: Evaluation) => {
+    setEvaluation(updatedEval)
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
@@ -69,8 +239,9 @@ export default function EvaluationPage() {
   }
 
   const isRunning = evaluation.status === 'pending' || evaluation.status === 'running'
-  const isCompleted = evaluation.status === 'completed'
+  const isCompleted = evaluation.status === 'completed' || evaluation.status === 'finalized'
   const isFailed = evaluation.status === 'failed'
+  const isFinalized = evaluation.status === 'finalized'
   
   // Show workflow visualization for pending, running, AND if recently completed (within 2 mins)
   const showWorkflow = isRunning || (isCompleted && evaluation.updated_at && 
@@ -85,6 +256,7 @@ export default function EvaluationPage() {
           <div className="flex items-center space-x-4">
             <span className={`px-3 py-1 rounded-full text-sm font-medium ${
               isRunning ? 'bg-yellow-500/20 text-yellow-400' :
+              isFinalized ? 'bg-blue-500/20 text-blue-400' :
               isCompleted ? 'bg-green-500/20 text-green-400' :
               isFailed ? 'bg-red-500/20 text-red-400' :
               'bg-gray-500/20 text-gray-400'
@@ -122,6 +294,57 @@ export default function EvaluationPage() {
           <div className="space-y-8">
             {evaluation.type === 'application' && (
               <>
+                {/* Onboarding Decision Section for Application */}
+                {(evaluation.status === 'completed' || evaluation.status === 'finalized') && evaluation.vendors?.[0] && (
+                  <Card>
+                    <h3 className="text-xl font-semibold mb-4 text-white">Onboarding Decision</h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <DecisionBadge decision={evaluation.vendors[0].decision} />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          className="rounded-md border border-emerald-600 bg-emerald-600/10 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-600/20 transition-colors"
+                          onClick={() => openDecisionModal(evaluation.vendors[0].id, 'approve')}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          className="rounded-md border border-amber-600 bg-amber-600/10 px-4 py-2 text-sm text-amber-300 hover:bg-amber-600/20 transition-colors"
+                          onClick={() => openDecisionModal(evaluation.vendors[0].id, 'approve_pending')}
+                        >
+                          Approve w/ Pending Actions
+                        </button>
+                        <button
+                          className="rounded-md border border-rose-600 bg-rose-600/10 px-4 py-2 text-sm text-rose-300 hover:bg-rose-600/20 transition-colors"
+                          onClick={() => openDecisionModal(evaluation.vendors[0].id, 'decline')}
+                        >
+                          Decline Vendor
+                        </button>
+                      </div>
+                    </div>
+                    {evaluation.vendors[0].decision?.pending_actions && evaluation.vendors[0].decision.pending_actions.length > 0 && (
+                      <div className="mb-3">
+                        <div className="text-sm font-semibold text-amber-400 mb-2">Pending Actions:</div>
+                        <ul className="text-sm text-gray-300 space-y-1.5">
+                          {evaluation.vendors[0].decision.pending_actions.map((action: string, i: number) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="text-amber-400">•</span>
+                              <span>{action}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {evaluation.vendors[0].decision?.notes && (
+                      <div>
+                        <div className="text-sm font-semibold text-gray-400 mb-2">Decision Notes:</div>
+                        <p className="text-sm text-gray-300">{evaluation.vendors[0].decision.notes}</p>
+                      </div>
+                    )}
+                  </Card>
+                )}
+
                 {evaluation.vendors?.[0]?.agent_outputs && (
                   <div className="grid md:grid-cols-2 gap-6">
                     <Card>
@@ -283,9 +506,10 @@ export default function EvaluationPage() {
                           {evaluation.vendors.map((vendor: any, idx: number) => (
                             <tr key={idx} className="border-b border-gray-800">
                               <td className="py-4">
-                                <div>
+                                <div className="space-y-1.5">
                                   <p className="font-medium text-white">{vendor.name}</p>
                                   <p className="text-sm text-gray-500">{vendor.website}</p>
+                                  <DecisionBadge decision={vendor.decision} />
                                 </div>
                               </td>
                               <td className="py-4 text-center text-gray-300">
@@ -361,6 +585,57 @@ export default function EvaluationPage() {
                               {vendorAnalysis.headline}
                             </p>
                           )}
+
+                          {/* Decision Action Buttons */}
+                          {evaluation.status === 'completed' || evaluation.status === 'finalized' ? (
+                            <div className="mb-4 pb-4 border-b border-slate-700">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="text-xs uppercase text-slate-400 mb-1">Onboarding Decision</div>
+                                  <DecisionBadge decision={vendor.decision} />
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    className="rounded-md border border-emerald-600 bg-emerald-600/10 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-600/20 transition-colors"
+                                    onClick={() => openDecisionModal(vendor.id, 'approve')}
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    className="rounded-md border border-amber-600 bg-amber-600/10 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-600/20 transition-colors"
+                                    onClick={() => openDecisionModal(vendor.id, 'approve_pending')}
+                                  >
+                                    Approve w/ Actions
+                                  </button>
+                                  <button
+                                    className="rounded-md border border-rose-600 bg-rose-600/10 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-600/20 transition-colors"
+                                    onClick={() => openDecisionModal(vendor.id, 'decline')}
+                                  >
+                                    Decline
+                                  </button>
+                                </div>
+                              </div>
+                              {vendor.decision?.pending_actions && vendor.decision.pending_actions.length > 0 && (
+                                <div className="mt-3">
+                                  <div className="text-xs font-semibold text-amber-400 mb-1">Pending Actions:</div>
+                                  <ul className="text-xs text-slate-300 space-y-1">
+                                    {vendor.decision.pending_actions.map((action: string, i: number) => (
+                                      <li key={i} className="flex items-start gap-2">
+                                        <span className="text-amber-400">•</span>
+                                        <span>{action}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {vendor.decision?.notes && (
+                                <div className="mt-2">
+                                  <div className="text-xs font-semibold text-slate-400 mb-1">Decision Notes:</div>
+                                  <p className="text-xs text-slate-300">{vendor.decision.notes}</p>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
 
                           {/* 4-dimension grid */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -444,6 +719,17 @@ export default function EvaluationPage() {
           </div>
         )}
       </div>
+
+      {/* Decision Modal */}
+      {evaluation && (
+        <DecisionModal
+          evaluationId={evaluationId}
+          vendors={evaluation.vendors}
+          state={decisionModal}
+          onClose={closeDecisionModal}
+          onUpdated={handleDecisionUpdate}
+        />
+      )}
     </div>
   )
 }

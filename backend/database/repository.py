@@ -72,3 +72,29 @@ def list_evaluations(limit: int = 100, skip: int = 0) -> List[dict]:
     
     return result
 
+
+def update_vendor_decision(evaluation_id: str, vendor_id: str, decision: dict) -> Optional[dict]:
+    """
+    Update vendor decision status in an evaluation.
+    Returns the updated evaluation or None if not found.
+    """
+    db = get_database()
+    collection = db.evaluations
+    
+    try:
+        # Update the decision for the specific vendor using positional operator
+        result = collection.find_one_and_update(
+            {"_id": ObjectId(evaluation_id), "vendors.id": vendor_id},
+            {"$set": {"vendors.$.decision": decision}},
+            return_document=True
+        )
+        
+        if result:
+            result["id"] = str(result["_id"])
+            del result["_id"]
+        
+        return result
+    except Exception as e:
+        print(f"Error updating vendor decision: {e}")
+        return None
+

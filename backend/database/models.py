@@ -4,9 +4,17 @@ Based on the PRD data model specification.
 """
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from enum import Enum
 
 from database import client as mongo_client  # noqa: F401
 from pydantic import BaseModel, Field
+
+
+class DimensionStatus(str, Enum):
+    """Status of a dimension evaluation"""
+    OK = "ok"
+    INSUFFICIENT_DATA = "insufficient_data"
+    RISK = "risk"
 
 
 class FileInfo(BaseModel):
@@ -26,6 +34,15 @@ class AgentOutputs(BaseModel):
     adoption: Optional[Dict[str, Any]] = None
 
 
+class VendorDecision(BaseModel):
+    """Vendor onboarding decision and lifecycle tracking"""
+    status: str = "pending"  # "pending" | "approved_pending_actions" | "approved" | "declined"
+    decided_by: Optional[str] = None
+    decided_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    pending_actions: List[str] = []
+
+
 class Vendor(BaseModel):
     """Vendor model"""
     id: str
@@ -40,6 +57,7 @@ class Vendor(BaseModel):
     agent_outputs: AgentOutputs = AgentOutputs()
     total_score: Optional[float] = None
     progress: Optional[str] = None  # For tracking pipeline progress
+    decision: VendorDecision = Field(default_factory=VendorDecision)  # Onboarding lifecycle state
 
 
 class Weights(BaseModel):

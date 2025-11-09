@@ -4,7 +4,7 @@ Enhanced with multi-step RAG for support and implementation research
 """
 from services.agents.base_agent import BaseAgent
 from services.document_processor import extract_texts_from_files, retrieve_relevant_context
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 
 class AdoptionAgent(BaseAgent):
@@ -61,18 +61,21 @@ class AdoptionAgent(BaseAgent):
         community_findings = self._analyze_community(adoption_info, company_name)
         findings.extend(community_findings)
         
-        # Calculate score
-        score = self._calculate_adoption_score(findings)
+        # Determine status and score
+        status, score = self._determine_status_and_score(findings)
         
         # Generate notes
         notes = self._generate_adoption_notes(findings, company_name)
         
         # Generate management-friendly summary
-        summary = self._generate_executive_summary(findings, score, company_name, impl_findings)
+        summary = self._generate_executive_summary(findings, score, company_name, impl_findings, status)
         
         # Extract key strengths and risks
         strengths = [f for f in findings if any(kw in f.lower() for kw in ["24/7", "comprehensive", "excellent", "extensive", "certification", "training"])][:4]
         risks = [f for f in findings if any(kw in f.lower() for kw in ["limited", "not", "unable", "unclear", "unavailable", "poor"])][:4]
+        
+        # Generate recommendations
+        recommendations = self._generate_recommendations(status, company_name, risks)
         
         # Create structured output
         output = self.create_structured_output(
@@ -82,18 +85,72 @@ class AdoptionAgent(BaseAgent):
             summary=summary,
             strengths=strengths,
             risks=risks,
+            status=status,
+            recommendations=recommendations,
             timeline=self._extract_timeline(impl_findings)
         )
         
         self.emit_event("agent_complete", {
             "status": "completed",
-            "score": score,
+            "dimension_status": status,
+            "score": score if score is not None else "N/A",
             "summary": summary,
             "findings_count": len(findings),
             "sources_count": len(self.sources)
         })
         
         return output
+    
+    def _determine_status_and_score(self, findings: List[str]) -> tuple[str, Optional[float]]:
+        """Determine status and score based on adoption support quality."""
+        official_sources = [s for s in self.sources if s.get("credibility") == "official"]
+        
+        # No reliable sources = insufficient data
+        if len(self.sources) == 0 or len(official_sources) == 0:
+            return ("insufficient_data", None)
+        
+        positive = [f for f in findings if any(kw in f.lower() for kw in ["24/7", "comprehensive", "excellent", "extensive", "robust", "available", "certification", "training"])]
+        negative = [f for f in findings if any(kw in f.lower() for kw in ["limited", "not", "unable", "unclear", "unavailable", "poor"])]
+        
+        # Mostly negative = risk
+        if len(negative) > len(positive):
+            return ("risk", 1.5)
+        
+        # Some positive = ok
+        if len(positive) > 0:
+            score = (len(positive) - len(negative) * 0.5) / len(findings) * 5.0
+            return ("ok", max(2.0, min(5.0, score)))
+        
+        return ("insufficient_data", None)
+    
+    def _generate_recommendations(self, status: str, vendor_name: str, risks: List[str]) -> List[str]:
+        """Generate actionable recommendations."""
+        recommendations = []
+        
+        if status == "insufficient_data":
+            recommendations.append(
+                f"Request {vendor_name} customer success program details, implementation timeline, and support SLAs"
+            )
+            recommendations.append(
+                "Obtain training materials, certification programs, and documentation quality samples"
+            )
+            recommendations.append(
+                "Schedule implementation workshop with vendor to assess onboarding complexity"
+            )
+        elif status == "risk":
+            recommendations.append(
+                f"{vendor_name} adoption support appears limited - plan for extensive internal training and change management"
+            )
+            for risk in risks[:2]:
+                recommendations.append(f"Mitigate: {risk}")
+        else:  # ok
+            recommendations.append(
+                f"Validate {vendor_name} support SLAs and escalation procedures"
+            )
+            if risks:
+                recommendations.append(f"Clarify: {'; '.join(risks[:2])}")
+        
+        return recommendations[:4]
     
     def _analyze_implementation(self, info: str, vendor_name: str) -> List[str]:
         """Analyze implementation timeline and complexity."""
@@ -276,19 +333,29 @@ Return JSON: {{"community_findings": ["finding1", "finding2", ...]}}
         
         return f"Adoption assessment based on {len(self.sources)} sources. {len(findings)} factors evaluated. Training and support resources {'well-documented' if len(self.sources) >= 3 else 'partially documented'}. Confidence: {self._calculate_confidence()}"
     
-    def _generate_executive_summary(self, findings: List[str], score: float, vendor_name: str, impl_findings: List[str]) -> str:
+    def _generate_executive_summary(self, findings: List[str], score: Optional[float], vendor_name: str, impl_findings: List[str], status: str) -> str:
         """Generate a 2-3 sentence executive summary suitable for management."""
         timeline = self._extract_timeline(impl_findings)
         support_count = sum(1 for f in findings if "support" in f.lower() or "training" in f.lower())
         
-        if score >= 4.0:
-            return f"{vendor_name} provides excellent adoption support with comprehensive training resources, {timeline} implementation timeline, and strong customer success programs. Low organizational change risk with well-documented onboarding path."
-        elif score >= 3.0:
-            return f"{vendor_name} offers solid adoption resources with {support_count} documented support and training options. Implementation timeline of {timeline} is reasonable, though some organizational change management will be required."
-        elif score >= 2.0:
-            return f"{vendor_name} has limited publicly available adoption resources. {timeline} implementation timeline estimated; plan for significant internal training development and extended onboarding period."
-        else:
+        # Handle insufficient data
+        if status == "insufficient_data":
+            official_sources = [s for s in self.sources if s.get("credibility") == "official"]
             if len(self.sources) == 0:
-                return f"Adoption resources for {vendor_name} not accessible in public documentation. Support plans, training materials, implementation timelines, and customer success programs must be evaluated through direct vendor engagement."
+                return f"⚠️ **Insufficient public data** - Adoption resources for {vendor_name} not accessible in public documentation. Support plans, training materials, implementation timelines, and customer success programs must be obtained directly from vendor."
+            elif len(official_sources) == 0:
+                return f"⚠️ **Insufficient public data** - Found {len(self.sources)} community sources for {vendor_name}, but no official support documentation. Cannot verify implementation timeline or training resources without official materials."
             else:
-                return f"{vendor_name} adoption posture is concerning with minimal training resources and unclear implementation support. High organizational risk for {timeline} deployment without substantial internal resources and vendor-led professional services."
+                return f"⚠️ **Insufficient public data** - {vendor_name} has limited adoption resources with {timeline} estimated timeline. Plan for significant internal training development and extended onboarding period."
+        
+        # Handle risk
+        if status == "risk":
+            return f"🔴 **High Risk** - {vendor_name} adoption posture is concerning with minimal training resources and unclear implementation support. High organizational risk for {timeline} deployment without substantial internal resources and vendor-led professional services."
+        
+        # Handle OK cases
+        if score and score >= 4.0:
+            return f"✅ {vendor_name} provides excellent adoption support with comprehensive training resources, {timeline} implementation timeline, and strong customer success programs. Low organizational change risk with well-documented onboarding path."
+        elif score and score >= 3.0:
+            return f"✅ {vendor_name} offers solid adoption resources with {support_count} documented support and training options. Implementation timeline of {timeline} is reasonable, though some organizational change management will be required."
+        else:
+            return f"⚠️ {vendor_name} has basic adoption resources. {timeline} implementation timeline; some organizational change management required."
