@@ -4,7 +4,7 @@ Enhanced with multi-step RAG for thorough integration research
 """
 from services.agents.base_agent import BaseAgent
 from services.document_processor import extract_texts_from_files, retrieve_relevant_context
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 
 class InteroperabilityAgent(BaseAgent):
@@ -77,18 +77,21 @@ class InteroperabilityAgent(BaseAgent):
         for integration in specific_integrations:
             findings.extend(self._analyze_specific_integration(interop_info, company_name, integration))
         
-        # Calculate score
-        score = self._calculate_interoperability_score(findings, required_integrations)
+        # Determine status and score
+        status, score = self._determine_status_and_score(findings, required_integrations)
         
         # Generate notes
         notes = self._generate_interoperability_notes(findings, company_name, required_integrations)
         
         # Generate management-friendly summary
-        summary = self._generate_executive_summary(findings, score, company_name, required_integrations)
+        summary = self._generate_executive_summary(findings, score, company_name, required_integrations, status)
         
         # Extract key strengths and risks
         strengths = [f for f in findings if any(kw in f.lower() for kw in ["supports", "available", "native", "comprehensive", "documented"])][:4]
         risks = [f for f in findings if any(kw in f.lower() for kw in ["not", "unable", "unclear", "unavailable", "undocumented"])][:4]
+        
+        # Generate recommendations
+        recommendations = self._generate_recommendations(status, company_name, risks, required_integrations)
         
         # Create structured output
         output = self.create_structured_output(
@@ -98,18 +101,88 @@ class InteroperabilityAgent(BaseAgent):
             summary=summary,
             strengths=strengths,
             risks=risks,
+            status=status,
+            recommendations=recommendations,
             apis=self._extract_api_types(api_findings)
         )
         
         self.emit_event("agent_complete", {
             "status": "completed",
-            "score": score,
+            "dimension_status": status,
+            "score": score if score is not None else "N/A",
             "summary": summary,
             "findings_count": len(findings),
             "sources_count": len(self.sources)
         })
         
         return output
+    
+    def _determine_status_and_score(self, findings: List[str], requirements: List[str]) -> tuple[str, Optional[float]]:
+        """
+        Determine dimension status and score based on evidence quality.
+        
+        Returns:
+            Tuple of (status, score) where status is "ok"/"insufficient_data"/"risk"
+        """
+        official_sources = [s for s in self.sources if s.get("credibility") == "official"]
+        
+        # No reliable sources = insufficient data
+        if len(self.sources) == 0 or len(official_sources) == 0:
+            return ("insufficient_data", None)
+        
+        positive = [f for f in findings if any(kw in f.lower() for kw in ["supports", "available", "provides", "native", "comprehensive", "documented"])]
+        negative = [f for f in findings if any(kw in f.lower() for kw in ["not", "unable", "unclear", "unavailable", "undocumented"])]
+        
+        # Check if critical requirements are met
+        if requirements:
+            requirements_met = sum(1 for req in requirements if any(req.lower() in f.lower() for f in findings))
+            requirements_ratio = requirements_met / len(requirements)
+        else:
+            requirements_ratio = 1.0  # No specific requirements
+        
+        # Mostly negative findings + missing requirements = risk
+        if len(negative) > len(positive) and requirements_ratio < 0.5:
+            return ("risk", 1.5)
+        
+        # Some positive findings = ok
+        if len(positive) > 0:
+            base_score = (len(positive) - len(negative) * 0.5) / len(findings) * 4.0
+            requirement_bonus = requirements_ratio * 1.0
+            score = base_score + requirement_bonus
+            return ("ok", max(2.0, min(5.0, score)))
+        
+        # Not enough info
+        return ("insufficient_data", None)
+    
+    def _generate_recommendations(self, status: str, vendor_name: str, risks: List[str], requirements: List[str]) -> List[str]:
+        """Generate actionable recommendations."""
+        recommendations = []
+        
+        if status == "insufficient_data":
+            recommendations.append(
+                f"Request API documentation, integration guides, and SSO setup instructions from {vendor_name}"
+            )
+            if requirements:
+                recommendations.append(
+                    f"Verify specific integrations: {', '.join(requirements[:3])}"
+                )
+            recommendations.append(
+                "Schedule technical workshop with vendor to validate integration capabilities"
+            )
+        elif status == "risk":
+            recommendations.append(
+                f"Conduct comprehensive integration proof-of-concept before committing to {vendor_name}"
+            )
+            for risk in risks[:2]:
+                recommendations.append(f"Address integration gap: {risk}")
+        else:  # ok
+            recommendations.append(
+                f"Validate {vendor_name} API rate limits and SLAs for production use"
+            )
+            if risks:
+                recommendations.append(f"Clarify: {'; '.join(risks[:2])}")
+        
+        return recommendations[:4]
     
     def _extract_integration_requirements(self, use_case: str) -> List[str]:
         """Extract specific integration requirements from use case."""
@@ -318,22 +391,33 @@ Return JSON: {{"{integration_name.lower()}_integration": ["finding1", "finding2"
         else:
             return f"Integration evaluation based on {len(self.sources)} sources. {len(findings)} capabilities documented. Confidence: {self._calculate_confidence()}"
     
-    def _generate_executive_summary(self, findings: List[str], score: float, vendor_name: str, requirements: List[str]) -> str:
+    def _generate_executive_summary(self, findings: List[str], score: Optional[float], vendor_name: str, requirements: List[str], status: str) -> str:
         """Generate a 2-3 sentence executive summary suitable for management."""
         requirements_met = sum(1 for req in requirements if any(req.lower() in f.lower() for f in findings))
         api_types = self._extract_api_types(findings)
         
-        if score >= 4.0:
+        # Handle insufficient data
+        if status == "insufficient_data":
+            official_sources = [s for s in self.sources if s.get("credibility") == "official"]
+            if len(self.sources) == 0:
+                req_str = f" particularly {', '.join(requirements[:2])}" if requirements else ""
+                return f"⚠️ **Insufficient public data** - Could not verify integration capabilities for {vendor_name} from accessible documentation{req_str}. API documentation, SSO setup guides, and integration examples must be obtained directly from vendor."
+            elif len(official_sources) == 0:
+                return f"⚠️ **Insufficient public data** - Found {len(self.sources)} community sources for {vendor_name}, but no official API documentation. Cannot verify integration capabilities or SSO support without official developer portal access."
+            else:
+                missing = len(requirements) - requirements_met if requirements else 0
+                return f"⚠️ **Insufficient public data** - Limited integration documentation for {vendor_name} with {missing} critical integrations unverified. Detailed technical discovery required before commitment."
+        
+        # Handle risk
+        if status == "risk":
+            return f"🔴 **High Risk** - {vendor_name} integration posture is weak with minimal API documentation and unclear support for required systems. Not recommended without comprehensive integration workshop and proof of concept."
+        
+        # Handle OK cases
+        if score and score >= 4.0:
             api_str = ", ".join(api_types) if api_types else "modern APIs"
             req_str = f" including {requirements_met}/{len(requirements)} required integrations" if requirements else ""
-            return f"{vendor_name} provides comprehensive integration capabilities with {api_str}{req_str}. Documentation is strong and implementation risk is low."
-        elif score >= 3.0:
-            return f"{vendor_name} offers solid integration options with {len(api_types)} API types documented. {len(findings)} capabilities verified, though some integration patterns may require custom development."
-        elif score >= 2.0:
-            missing = len(requirements) - requirements_met if requirements else 0
-            return f"{vendor_name} has limited integration documentation with {missing} critical integrations unverified. API capabilities exist but require detailed technical discovery before commitment."
+            return f"✅ {vendor_name} provides comprehensive integration capabilities with {api_str}{req_str}. Documentation is strong and implementation risk is low."
+        elif score and score >= 3.0:
+            return f"✅ {vendor_name} offers solid integration options with {len(api_types)} API types documented. {len(findings)} capabilities verified, though some integration patterns may require custom development."
         else:
-            if len(self.sources) == 0:
-                return f"Could not verify integration capabilities for {vendor_name} from accessible documentation. API documentation, SSO setup guides, and integration examples must be obtained from vendor."
-            else:
-                return f"{vendor_name} integration posture is weak with minimal API documentation and unclear support for required systems. Not recommended without comprehensive integration workshop and proof of concept."
+            return f"⚠️ {vendor_name} has basic integration documentation. API capabilities exist but require detailed technical verification before commitment."

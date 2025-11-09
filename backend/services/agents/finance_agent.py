@@ -4,7 +4,7 @@ Enhanced with multi-step RAG for pricing and TCO research
 """
 from services.agents.base_agent import BaseAgent
 from services.document_processor import extract_texts_from_files, retrieve_relevant_context
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 
 class FinanceAgent(BaseAgent):
@@ -62,18 +62,21 @@ class FinanceAgent(BaseAgent):
         # Calculate estimated TCO
         tco_estimate = self._estimate_tco(findings, user_count)
         
-        # Calculate score (lower cost = higher score, with quality consideration)
-        score = self._calculate_finance_score(findings, tco_estimate, user_count)
+        # Determine status and score
+        status, score = self._determine_status_and_score(findings, tco_estimate)
         
         # Generate notes
         notes = self._generate_finance_notes(findings, company_name, tco_estimate, user_count)
         
         # Generate management-friendly summary
-        summary = self._generate_executive_summary(findings, score, company_name, tco_estimate, user_count)
+        summary = self._generate_executive_summary(findings, score, company_name, tco_estimate, user_count, status)
         
         # Extract key strengths and risks
         strengths = [f for f in findings if any(kw in f.lower() for kw in ["competitive", "transparent", "volume discount", "flexible", "included"])][:4]
         risks = [f for f in findings if any(kw in f.lower() for kw in ["not available", "hidden", "additional", "requires quote", "unclear"])][:4]
+        
+        # Generate recommendations
+        recommendations = self._generate_recommendations(status, company_name, risks)
         
         # Create structured output
         output = self.create_structured_output(
@@ -83,19 +86,90 @@ class FinanceAgent(BaseAgent):
             summary=summary,
             strengths=strengths,
             risks=risks,
+            status=status,
+            recommendations=recommendations,
             pricing_model=self._extract_pricing_model(pricing_findings),
             estimated_tco=tco_estimate
         )
         
         self.emit_event("agent_complete", {
             "status": "completed",
-            "score": score,
+            "dimension_status": status,
+            "score": score if score is not None else "N/A",
             "summary": summary,
             "tco_estimate": tco_estimate,
             "sources_count": len(self.sources)
         })
         
         return output
+    
+    def _determine_status_and_score(self, findings: List[str], tco: Dict[str, Any]) -> tuple[str, Optional[float]]:
+        """Determine status and score based on pricing transparency and competitiveness."""
+        official_sources = [s for s in self.sources if s.get("credibility") == "official"]
+        
+        # No reliable pricing sources = insufficient data
+        if len(self.sources) == 0 or len(official_sources) == 0:
+            return ("insufficient_data", None)
+        
+        # Calculate score based on transparency and competitiveness
+        three_year_tco = tco["three_year_total"]
+        user_count = tco["user_count"]
+        per_user_monthly = three_year_tco / (user_count * 36)
+        
+        # Score inversely with cost (lower cost = higher score)
+        if per_user_monthly < 50:
+            cost_score = 5.0
+        elif per_user_monthly < 100:
+            cost_score = 4.0
+        elif per_user_monthly < 150:
+            cost_score = 3.0
+        elif per_user_monthly < 200:
+            cost_score = 2.5
+        else:
+            cost_score = 2.0
+        
+        # Adjust for transparency
+        transparency_bonus = 0.5 if len(official_sources) >= 2 else 0.0
+        score = min(5.0, cost_score + transparency_bonus)
+        
+        # If cost is extremely high and no transparency, mark as risk
+        if per_user_monthly > 250 and len(official_sources) == 0:
+            return ("risk", 1.5)
+        
+        return ("ok", score)
+    
+    def _generate_recommendations(self, status: str, vendor_name: str, risks: List[str]) -> List[str]:
+        """Generate actionable recommendations."""
+        recommendations = []
+        
+        if status == "insufficient_data":
+            recommendations.append(
+                f"Request formal pricing quote from {vendor_name} with detailed breakdown (licensing, implementation, training, support)"
+            )
+            recommendations.append(
+                "Obtain pricing for comparable enterprise deployments as reference"
+            )
+            recommendations.append(
+                "Negotiate volume pricing and multi-year discounts"
+            )
+        elif status == "risk":
+            recommendations.append(
+                f"{vendor_name} pricing appears uncompetitive - explore alternative vendors"
+            )
+            recommendations.append(
+                "If proceeding, negotiate aggressively on all cost components"
+            )
+        else:  # ok
+            recommendations.append(
+                f"Verify {vendor_name} pricing quote against public estimates"
+            )
+            if risks:
+                recommendations.append(f"Clarify hidden costs: {'; '.join(risks[:2])}")
+            recommendations.append(
+                "Build 3-year TCO model with all cost components"
+            )
+        
+        return recommendations[:4]
     
     def _extract_user_count(self, use_case: str) -> int:
         """Extract user count from use case, default to 300."""
@@ -299,20 +373,30 @@ Return JSON: {{"support_findings": ["finding1", "finding2", ...]}}
         
         return f"3-year TCO estimate: ${tco_val:,} (~${per_user_monthly}/user/month for {user_count} users). Based on {len(self.sources)} sources. {len(findings)} cost factors identified. Confidence: {self._calculate_confidence()}"
     
-    def _generate_executive_summary(self, findings: List[str], score: float, vendor_name: str, tco: Dict[str, Any], user_count: int) -> str:
+    def _generate_executive_summary(self, findings: List[str], score: Optional[float], vendor_name: str, tco: Dict[str, Any], user_count: int, status: str) -> str:
         """Generate a 2-3 sentence executive summary suitable for management."""
         tco_val = tco["three_year_total"]
         per_user_monthly = tco["per_user_per_month_estimate"]
         year1_total = tco["year1"]["total"]
         
-        if score >= 4.0:
-            return f"{vendor_name} offers competitive pricing at ~${per_user_monthly}/user/month (${tco_val:,} 3-year TCO for {user_count} users). Transparent pricing model with Year 1 total of ${year1_total:,} including implementation."
-        elif score >= 3.0:
-            return f"{vendor_name} pricing is within market range at ~${per_user_monthly}/user/month (${tco_val:,} 3-year TCO). Some cost details require vendor quote, but overall financial profile is acceptable for {user_count}-user deployment."
-        elif score >= 2.0:
-            return f"{vendor_name} pricing lacks transparency with estimated ${tco_val:,} 3-year TCO based on industry averages. Year 1 costs (${year1_total:,}) include estimated implementation fees; formal quote required for budgeting."
-        else:
+        # Handle insufficient data
+        if status == "insufficient_data":
+            official_sources = [s for s in self.sources if s.get("credibility") == "official"]
             if len(self.sources) == 0:
-                return f"Pricing information for {vendor_name} is not publicly available. Based on industry benchmarks for similar solutions, estimated 3-year TCO is ${tco_val:,} (~${per_user_monthly}/user/month for {user_count} users). Formal quote must be obtained for accurate budgeting."
+                return f"⚠️ **Insufficient public data** - Pricing information for {vendor_name} is not publicly available. Based on industry benchmarks, estimated 3-year TCO is ${tco_val:,} (~${per_user_monthly}/user/month for {user_count} users). Formal quote must be obtained for accurate budgeting."
+            elif len(official_sources) == 0:
+                return f"⚠️ **Insufficient public data** - Found {len(self.sources)} community sources for {vendor_name} pricing, but no official pricing documentation. Estimated ${tco_val:,} 3-year TCO based on indirect sources. Request formal pricing quote for accurate assessment."
             else:
-                return f"{vendor_name} pricing structure is unclear or appears uncompetitive at estimated ~${per_user_monthly}/user/month. Hidden costs and setup fees may significantly impact TCO beyond the ${tco_val:,} estimate. Recommend exploring alternatives or negotiating volume pricing."
+                return f"⚠️ **Insufficient public data** - {vendor_name} pricing lacks transparency with estimated ${tco_val:,} 3-year TCO based on limited sources. Year 1 costs (${year1_total:,}) include estimated fees; formal quote required for budgeting."
+        
+        # Handle risk
+        if status == "risk":
+            return f"🔴 **High Risk** - {vendor_name} pricing structure appears uncompetitive at estimated ~${per_user_monthly}/user/month. Hidden costs and setup fees may significantly impact TCO beyond the ${tco_val:,} estimate. Recommend exploring alternatives or negotiating aggressively."
+        
+        # Handle OK cases
+        if score and score >= 4.0:
+            return f"✅ {vendor_name} offers competitive pricing at ~${per_user_monthly}/user/month (${tco_val:,} 3-year TCO for {user_count} users). Transparent pricing model with Year 1 total of ${year1_total:,} including implementation."
+        elif score and score >= 3.0:
+            return f"✅ {vendor_name} pricing is within market range at ~${per_user_monthly}/user/month (${tco_val:,} 3-year TCO). Some cost details require vendor quote, but overall financial profile is acceptable for {user_count}-user deployment."
+        else:
+            return f"⚠️ {vendor_name} pricing requires clarification with estimated ${tco_val:,} 3-year TCO. Formal quote needed for accurate budgeting."

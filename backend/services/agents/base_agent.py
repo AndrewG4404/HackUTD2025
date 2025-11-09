@@ -67,18 +67,22 @@ class BaseAgent(ABC):
     
     def create_structured_output(
         self,
-        score: float,
+        score: Optional[float],
         findings: List[str],
         notes: str = "",
+        status: str = "ok",
+        recommendations: Optional[List[str]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
         Create standardized agent output with sources and confidence.
         
         Args:
-            score: Numeric score (0-5)
+            score: Numeric score (0-5) or None for insufficient data
             findings: List of key findings
             notes: Additional notes/summary
+            status: Dimension status ("ok", "insufficient_data", or "risk")
+            recommendations: List of actionable recommendations
             **kwargs: Additional agent-specific fields
         
         Returns:
@@ -88,12 +92,14 @@ class BaseAgent(ABC):
         confidence = self._calculate_confidence()
         
         output = {
-            "score": round(score, 2),
+            "score": round(score, 2) if score is not None else None,
+            "status": status,
             "findings": findings,
             "notes": notes,
             "sources": self.sources,
             "ambiguities": self.ambiguities,
             "confidence": confidence,
+            "recommendations": recommendations or [],
             **kwargs
         }
         
