@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import ValidationError
 
+from database import client as mongo_client  # noqa: F401
 from database.models import Evaluation, FileInfo, Vendor, Weights
 from database.repository import (
     create_evaluation as repo_create_evaluation,

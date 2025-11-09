@@ -1,6 +1,7 @@
 """
-Documentation and API information endpoints
+Documentation and API information endpoints.
 """
+from database import client as mongo_client  # noqa: F401
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 

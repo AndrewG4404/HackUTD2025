@@ -1,6 +1,7 @@
 """
-Health check endpoint
+Health check endpoint.
 """
+from database import client as mongo_client  # noqa: F401
 from fastapi import APIRouter
 
 router = APIRouter()
