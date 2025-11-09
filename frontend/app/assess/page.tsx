@@ -161,15 +161,15 @@ export default function AssessPage() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold mb-2 text-white">Vendor Assessment Dashboard</h1>
-            <p className="text-gray-400">Compare vendors and get AI-powered recommendations</p>
+            <h1 className="text-4xl font-bold mb-2 text-gradient">🔮 The Grand Oracle Chamber</h1>
+            <p className="text-amber-200/80">Summon the Seven Sages to divine which vendor shall be chosen for your quest</p>
           </div>
           <Button
             onClick={() => setShowForm(!showForm)}
             variant={showForm ? 'secondary' : 'primary'}
             className="px-6"
           >
-            {showForm ? 'View Dashboard' : 'New Assessment'}
+            {showForm ? '📊 View Oracle Chamber' : '✨ New Divination'}
           </Button>
         </div>
 
@@ -178,41 +178,41 @@ export default function AssessPage() {
           <div className="space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
-                <div className="text-sm text-gray-400 mb-1">Total Assessments</div>
-                <div className="text-3xl font-bold text-white">
+              <div className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-xl p-6 magical-glow hover-lift">
+                <div className="text-sm text-amber-300 mb-1">📜 Total Prophecies</div>
+                <div className="text-3xl font-bold text-gradient">
                   {dashboardLoading ? '—' : totalAssessments}
                 </div>
-                <div className="text-xs text-green-400 mt-2">All time</div>
+                <div className="text-xs text-purple-400 mt-2">Divinations performed</div>
               </div>
-              <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
-                <div className="text-sm text-gray-400 mb-1">Active Evaluations</div>
-                <div className="text-3xl font-bold text-white">
+              <div className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-xl p-6 magical-glow hover-lift">
+                <div className="text-sm text-amber-300 mb-1">🔮 Active Rituals</div>
+                <div className="text-3xl font-bold text-gradient">
                   {dashboardLoading ? '—' : activeEvaluations}
                 </div>
-                <div className="text-xs text-blue-400 mt-2">In progress</div>
+                <div className="text-xs text-purple-400 mt-2">Sages channeling</div>
               </div>
-              <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
-                <div className="text-sm text-gray-400 mb-1">Vendors Evaluated</div>
-                <div className="text-3xl font-bold text-white">
+              <div className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-xl p-6 magical-glow hover-lift">
+                <div className="text-sm text-amber-300 mb-1">🏰 Vendors Divined</div>
+                <div className="text-3xl font-bold text-gradient">
                   {dashboardLoading ? '—' : totalVendorsEvaluated}
                 </div>
-                <div className="text-xs text-cyan-400 mt-2">All time</div>
+                <div className="text-xs text-purple-400 mt-2">Fates revealed</div>
               </div>
-              <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
-                <div className="text-sm text-gray-400 mb-1">Completed</div>
-                <div className="text-3xl font-bold text-white">
+              <div className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-xl p-6 magical-glow hover-lift">
+                <div className="text-sm text-amber-300 mb-1">✨ Prophecies Fulfilled</div>
+                <div className="text-3xl font-bold text-gradient">
                   {dashboardLoading ? '—' : completedEvaluations.length}
                 </div>
-                <div className="text-xs text-purple-400 mt-2">Successfully finished</div>
+                <div className="text-xs text-purple-400 mt-2">Destinies written</div>
               </div>
             </div>
 
             {/* Charts and Info Row */}
             <div className="grid md:grid-cols-2 gap-6">
               {/* Priority Weights Chart */}
-              <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-4">Priority Weights Distribution</h3>
+              <div className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-xl p-6 magical-glow">
+                <h3 className="text-xl font-bold text-gradient mb-4">🔮 Divination Focus Realms</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -256,35 +256,35 @@ export default function AssessPage() {
               </div>
 
               {/* Quick Info Card */}
-              <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-4">Assessment Overview</h3>
+              <div className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-xl p-6 magical-glow">
+                <h3 className="text-xl font-bold text-gradient mb-4">✨ Ancient Divination Arts</h3>
                 <div className="space-y-4">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full mt-2"></div>
-                    <div>
-                      <div className="text-white font-medium">AI-Powered Analysis</div>
-                      <div className="text-sm text-gray-400">Nemotron agents analyze vendors across multiple dimensions</div>
-                    </div>
-                  </div>
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-cyan-400 rounded-full mt-2"></div>
-                    <div>
-                      <div className="text-white font-medium">Multi-Vendor Comparison</div>
-                      <div className="text-sm text-gray-400">Compare up to multiple vendors simultaneously</div>
-                    </div>
-                  </div>
                   <div className="flex items-start space-x-3">
                     <div className="w-2 h-2 bg-purple-400 rounded-full mt-2"></div>
                     <div>
-                      <div className="text-white font-medium">Customizable Weights</div>
-                      <div className="text-sm text-gray-400">Set priority weights for Security, Cost, Interoperability, and Adoption</div>
+                      <div className="text-amber-200 font-medium">Seven Mystical Sages</div>
+                      <div className="text-sm text-gray-400">Nemotron-enchanted sorcerers divine vendor truths across mystical realms</div>
                     </div>
                   </div>
                   <div className="flex items-start space-x-3">
                     <div className="w-2 h-2 bg-pink-400 rounded-full mt-2"></div>
                     <div>
-                      <div className="text-white font-medium">Automated Recommendations</div>
-                      <div className="text-sm text-gray-400">Get AI-powered vendor recommendations based on your criteria</div>
+                      <div className="text-amber-200 font-medium">Multi-Realm Scrying</div>
+                      <div className="text-sm text-gray-400">Compare multiple vendors simultaneously through the crystal orb</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <div className="w-2 h-2 bg-amber-400 rounded-full mt-2"></div>
+                    <div>
+                      <div className="text-amber-200 font-medium">Customized Prophecy Weights</div>
+                      <div className="text-sm text-gray-400">Channel sage energy into Security, Cost, Interoperability, and Adoption realms</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <div className="w-2 h-2 bg-cyan-400 rounded-full mt-2"></div>
+                    <div>
+                      <div className="text-amber-200 font-medium">Destiny Revealed</div>
+                      <div className="text-sm text-gray-400">Receive divine wisdom and vendor recommendations inscribed in prophecy scrolls</div>
                     </div>
                   </div>
                 </div>
@@ -292,16 +292,16 @@ export default function AssessPage() {
             </div>
 
             {/* Recent Assessments */}
-            <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
-              <h3 className="text-xl font-bold text-white mb-4">Recent Assessments</h3>
+            <div className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-xl p-6 magical-glow">
+              <h3 className="text-xl font-bold text-gradient mb-4">📜 Recent Prophecy Scrolls</h3>
               <div className="space-y-3">
                 {dashboardLoading ? (
-                  <div className="text-center py-8 text-gray-400">Loading...</div>
+                  <div className="text-center py-8 text-amber-300">🔮 Consulting the ancient archives...</div>
                 ) : recentEvaluations.length > 0 ? (
                   recentEvaluations.map((evaluation) => (
                     <div 
                       key={evaluation.id} 
-                      className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5 hover:border-blue-500/30 transition-colors cursor-pointer"
+                      className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-purple-500/20 hover:border-purple-400/60 transition-colors cursor-pointer hover-lift"
                       onClick={() => router.push(`/evaluations/${evaluation.id}`)}
                     >
                       <div>
@@ -326,8 +326,8 @@ export default function AssessPage() {
                   ))
                 ) : (
                   <div className="text-center py-8 text-gray-400">
-                    <p className="mb-2">No assessments yet</p>
-                    <p className="text-sm">Click "New Assessment" to get started</p>
+                    <p className="mb-2 text-amber-300">✨ The scrolls are empty</p>
+                    <p className="text-sm">Click "New Divination" to inscribe your first prophecy</p>
                   </div>
                 )}
               </div>
@@ -337,44 +337,44 @@ export default function AssessPage() {
           /* Assessment Form */
           <form onSubmit={handleSubmit} className="space-y-8">
             {/* Assessment Details */}
-            <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-8">
-              <h2 className="text-2xl font-bold mb-6 text-white">Assessment Details</h2>
+            <div className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-xl p-8 magical-glow">
+              <h2 className="text-2xl font-bold mb-6 text-gradient">📜 The Quest Begins</h2>
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Evaluation Name <span className="text-red-400">*</span>
+                  <label className="block text-sm font-medium text-amber-300 mb-2">
+                    Quest Name <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    placeholder="e.g., Q1 2025 Vendor Evaluation"
+                    className="w-full px-4 py-3 bg-white/5 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
+                    placeholder="e.g., The Great CRM Quest of 2025"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Use Case Description <span className="text-red-400">*</span>
+                  <label className="block text-sm font-medium text-amber-300 mb-2">
+                    The Oracle's Question <span className="text-red-400">*</span>
                   </label>
                   <textarea
                     required
                     value={formData.use_case}
                     onChange={(e) => setFormData({ ...formData, use_case: e.target.value })}
                     rows={5}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
-                    placeholder="Describe the use case, requirements, and evaluation criteria..."
+                    className="w-full px-4 py-3 bg-white/5 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all resize-none"
+                    placeholder="What destiny do you seek? Describe your requirements, constraints, and the prophecy you wish to fulfill..."
                   />
                 </div>
               </div>
             </div>
 
             {/* Priority Weights with Chart */}
-            <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-8">
+            <div className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-xl p-8 magical-glow">
               <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-white">Priority Weights</h2>
-                  <div className="text-sm text-gray-400 mt-1">Adjust sliders or use presets below</div>
+                  <h2 className="text-2xl font-bold text-gradient">🔮 Channel Sage Energy</h2>
+                  <div className="text-sm text-amber-200/70 mt-1">Direct the mystical flow into different realms using sliders or sacred presets</div>
                 </div>
                 
                 {/* Preset Buttons */}
@@ -382,30 +382,30 @@ export default function AssessPage() {
                   <button
                     type="button"
                     onClick={() => applyPreset('balanced')}
-                    className="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 rounded-lg text-blue-300 text-xs font-medium transition-colors"
+                    className="px-3 py-2 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 rounded-lg text-purple-300 text-xs font-medium transition-colors"
                   >
-                    ⚖️ Balanced
+                    ⚖️ Harmonious Balance
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPreset('security_first')}
-                    className="px-3 py-2 bg-green-600/20 hover:bg-green-600/40 border border-green-500/30 rounded-lg text-green-300 text-xs font-medium transition-colors"
+                    className="px-3 py-2 bg-pink-600/20 hover:bg-pink-600/40 border border-pink-500/30 rounded-lg text-pink-300 text-xs font-medium transition-colors"
                   >
-                    🔒 Security First
+                    🔒 Guardian's Shield
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPreset('cost_focused')}
-                    className="px-3 py-2 bg-yellow-600/20 hover:bg-yellow-600/40 border border-yellow-500/30 rounded-lg text-yellow-300 text-xs font-medium transition-colors"
+                    className="px-3 py-2 bg-amber-600/20 hover:bg-amber-600/40 border border-amber-500/30 rounded-lg text-amber-300 text-xs font-medium transition-colors"
                   >
-                    💰 Cost Focused
+                    💰 Golden Path
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPreset('integration_focused')}
-                    className="px-3 py-2 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 rounded-lg text-purple-300 text-xs font-medium transition-colors"
+                    className="px-3 py-2 bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-500/30 rounded-lg text-cyan-300 text-xs font-medium transition-colors"
                   >
-                    🔧 Integration Focused
+                    🔮 Weaver's Web
                   </button>
                 </div>
               </div>
@@ -482,26 +482,26 @@ export default function AssessPage() {
 
             {/* Vendors */}
             <div>
-              <h2 className="text-2xl font-bold mb-6 text-white">Vendors to Compare</h2>
+              <h2 className="text-2xl font-bold mb-6 text-gradient">🏰 Vendors of the Realm</h2>
               <div className="grid md:grid-cols-2 gap-6">
                 {vendors.map((vendor, index) => (
-                  <div key={vendor.id} className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6 hover:border-blue-500/30 transition-colors">
+                  <div key={vendor.id} className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-xl p-6 hover:border-purple-400/60 transition-colors magical-glow hover-lift">
                     <div className="flex items-center justify-between mb-6">
                       <div className="flex items-center">
-                        <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-xl flex items-center justify-center mr-4 shadow-lg">
+                        <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center mr-4 shadow-lg">
                           <span className="text-white font-bold text-xl">{String.fromCharCode(65 + index)}</span>
                         </div>
                         <div>
-                          <h3 className="text-xl font-bold text-white">Vendor {String.fromCharCode(65 + index)}</h3>
+                          <h3 className="text-xl font-bold text-amber-200">Vendor {String.fromCharCode(65 + index)}</h3>
                           <p className="text-xs text-gray-400">
-                            {vendor.files.length} file(s) • {vendor.doc_urls ? vendor.doc_urls.split(',').length : 0} URL(s)
+                            📜 {vendor.files.length} scroll(s) • ✨ {vendor.doc_urls ? vendor.doc_urls.split(',').length : 0} rune(s)
                           </p>
                         </div>
                       </div>
                     </div>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                        <label className="block text-sm font-medium text-amber-300 mb-2">
                           Vendor Name <span className="text-red-400">*</span>
                           <span className="text-xs text-gray-500 ml-2">e.g., ServiceNow</span>
                         </label>
@@ -514,13 +514,13 @@ export default function AssessPage() {
                             newVendors[index].name = e.target.value
                             setVendors(newVendors)
                           }}
-                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
-                          placeholder="Company name"
+                          className="w-full px-4 py-3 bg-white/5 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
+                          placeholder="Enter vendor name"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          🌐 Website URL <span className="text-red-400">*</span>
+                        <label className="block text-sm font-medium text-amber-300 mb-2">
+                          🌐 Portal Gateway <span className="text-red-400">*</span>
                         </label>
                         <input
                           type="url"
@@ -531,13 +531,13 @@ export default function AssessPage() {
                             newVendors[index].website = e.target.value
                             setVendors(newVendors)
                           }}
-                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
+                          className="w-full px-4 py-3 bg-white/5 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
                           placeholder="https://example.com"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          📄 Documents
+                        <label className="block text-sm font-medium text-amber-300 mb-2">
+                          📜 Sacred Scrolls
                           <span className="text-xs text-gray-500 ml-2">Optional</span>
                         </label>
                         <FileUpload
@@ -550,8 +550,8 @@ export default function AssessPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          🔗 Document URLs
+                        <label className="block text-sm font-medium text-amber-300 mb-2">
+                          ✨ Mystical Runes
                           <span className="text-xs text-gray-500 ml-2">Optional</span>
                         </label>
                         <input
@@ -562,10 +562,10 @@ export default function AssessPage() {
                             newVendors[index].doc_urls = e.target.value
                             setVendors(newVendors)
                           }}
-                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
+                          className="w-full px-4 py-3 bg-white/5 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none input-focus-glow transition-all"
                           placeholder="https://example.com/security, https://example.com/privacy"
                         />
-                        <p className="text-xs text-gray-500 mt-1">💡 Separate with commas</p>
+                        <p className="text-xs text-gray-500 mt-1">✨ Separate runes with commas</p>
                       </div>
                     </div>
                   </div>
@@ -574,35 +574,35 @@ export default function AssessPage() {
             </div>
 
             {/* Cost Estimator */}
-            <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/30 rounded-xl p-6">
+            <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-2 border-purple-500/30 rounded-xl p-6 magical-glow">
               <div className="flex items-start space-x-4">
-                <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-white mb-2">Estimated Evaluation Time</h3>
+                  <h3 className="text-lg font-bold text-gradient mb-2">⏳ Ritual Duration</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
-                    <div className="bg-black/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-blue-400">~{Math.ceil(estimatedMinutes)} min</div>
-                      <div className="text-xs text-gray-400">Total Time</div>
+                    <div className="bg-black/20 rounded-lg p-3 border border-purple-500/20">
+                      <div className="text-2xl font-bold text-purple-400">~{Math.ceil(estimatedMinutes)} min</div>
+                      <div className="text-xs text-amber-300">⏳ Channeling Time</div>
                     </div>
-                    <div className="bg-black/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-cyan-400">{vendors.length}</div>
-                      <div className="text-xs text-gray-400">Vendors</div>
+                    <div className="bg-black/20 rounded-lg p-3 border border-purple-500/20">
+                      <div className="text-2xl font-bold text-pink-400">{vendors.length}</div>
+                      <div className="text-xs text-amber-300">🏰 Vendors</div>
                     </div>
-                    <div className="bg-black/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-purple-400">{totalFiles}</div>
-                      <div className="text-xs text-gray-400">Files</div>
+                    <div className="bg-black/20 rounded-lg p-3 border border-purple-500/20">
+                      <div className="text-2xl font-bold text-cyan-400">{totalFiles}</div>
+                      <div className="text-xs text-amber-300">📜 Sacred Scrolls</div>
                     </div>
-                    <div className="bg-black/20 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-pink-400">{totalUrls}</div>
-                      <div className="text-xs text-gray-400">URLs</div>
+                    <div className="bg-black/20 rounded-lg p-3 border border-purple-500/20">
+                      <div className="text-2xl font-bold text-amber-400">{totalUrls}</div>
+                      <div className="text-xs text-amber-300">✨ Mystical Runes</div>
                     </div>
                   </div>
-                  <p className="text-sm text-blue-300">
-                    💡 {vendors.length} vendors × 7 agents × ~30s per agent = ~{Math.ceil(estimatedMinutes)} minutes
+                  <p className="text-sm text-purple-300">
+                    🔮 {vendors.length} vendors × 7 sages × ~30s per sage = ~{Math.ceil(estimatedMinutes)} minutes of divination
                   </p>
                 </div>
               </div>
@@ -620,10 +620,10 @@ export default function AssessPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Creating Assessment...
+                    🔮 Summoning the Sages...
                   </span>
                 ) : (
-                  'Start Assessment →'
+                  '✨ Begin Mystical Divination →'
                 )}
               </Button>
             </div>
@@ -636,11 +636,11 @@ export default function AssessPage() {
         isOpen={showSuccessModal}
         onClose={() => setShowSuccessModal(false)}
         type="success"
-        title="Assessment Created!"
+        title="🔮 The Ritual Begins!"
         showCloseButton={false}
       >
-        <p className="mb-4">Your assessment has been created successfully.</p>
-        <p className="text-sm text-gray-400">Redirecting to evaluation page...</p>
+        <p className="mb-4">The Seven Sages have convened in the Oracle Chamber. The divination has commenced.</p>
+        <p className="text-sm text-amber-300">Opening prophecy scroll...</p>
       </Modal>
 
       {/* Error Modal */}
@@ -648,7 +648,7 @@ export default function AssessPage() {
         isOpen={showErrorModal}
         onClose={() => setShowErrorModal(false)}
         type="error"
-        title="Assessment Failed"
+        title="❌ Ritual Interrupted"
       >
         <p className="mb-4">{errorMessage}</p>
         <Button
@@ -656,7 +656,7 @@ export default function AssessPage() {
           variant="primary"
           className="w-full"
         >
-          Try Again
+          Retry Summoning
         </Button>
       </Modal>
     </div>

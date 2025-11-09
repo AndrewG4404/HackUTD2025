@@ -20,6 +20,19 @@ export function WorkflowVisualization({ evaluationId, evaluationType, onComplete
     timelineEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [events]);
 
+  // Map agent names to mystical sage roles
+  const agentRoleMap: Record<string, string> = {
+    'IntakeAgent': '📜 The Sage of Origins',
+    'VerificationAgent': '✨ The Truth Seer',
+    'ComplianceAgent': '🔒 The Guardian of Laws',
+    'InteroperabilityAgent': '🔮 The Weaver of Connections',
+    'FinanceAgent': '💰 The Keeper of Gold',
+    'AdoptionAgent': '🌟 The Herald of Change',
+    'SummaryAgent': '📚 The Grand Chronicler',
+    'RequirementProfileAgent': '🗝️ The Prophecy Scribe',
+    'ComparisonAnalysisAgent': '⚖️ The Oracle Judge',
+  };
+
   const agentSequence = evaluationType === 'application' 
     ? ['IntakeAgent', 'VerificationAgent', 'ComplianceAgent', 'InteroperabilityAgent', 'FinanceAgent', 'AdoptionAgent', 'SummaryAgent']
     : ['RequirementProfileAgent', 'ComplianceAgent', 'InteroperabilityAgent', 'FinanceAgent', 'AdoptionAgent', 'ComparisonAnalysisAgent'];
@@ -86,8 +99,8 @@ export function WorkflowVisualization({ evaluationId, evaluationType, onComplete
       )}
 
       {/* Agent Pipeline View */}
-      <Card className="p-6">
-        <h3 className="text-xl font-semibold mb-6 text-white">Agent Pipeline</h3>
+      <Card className="p-6 border-2 border-purple-500/30 magical-glow">
+        <h3 className="text-xl font-semibold mb-6 text-gradient">🔮 The Seven Sages</h3>
         <div className="flex flex-col space-y-4">
           {agentSequence.map((agent, idx) => {
             const isCompleted = progress.completed.includes(agent);
@@ -111,22 +124,22 @@ export function WorkflowVisualization({ evaluationId, evaluationType, onComplete
 
                 {/* Agent Name */}
                 <div className="flex-1">
-                  <div className={`font-medium ${isCurrent ? 'text-blue-400' : 
-                    isCompleted ? 'text-green-400' : 'text-gray-400'}`}>
-                    {agent.replace('Agent', ' Agent')}
+                  <div className={`font-medium ${isCurrent ? 'text-purple-400' : 
+                    isCompleted ? 'text-amber-400' : 'text-gray-400'}`}>
+                    {agentRoleMap[agent] || agent.replace('Agent', ' Agent')}
                   </div>
                   {isCurrent && (
-                    <div className="text-sm text-gray-400 animate-pulse">Analyzing...</div>
+                    <div className="text-sm text-purple-400 animate-pulse">✨ Divining...</div>
                   )}
                   {isCompleted && (
-                    <div className="text-sm text-gray-500">Completed</div>
+                    <div className="text-sm text-amber-400">✅ Prophecy Complete</div>
                   )}
                 </div>
 
                 {/* Status Badge */}
                 {isCurrent && (
-                  <div className="px-3 py-1 bg-blue-600/20 border border-blue-500 rounded-full text-sm text-blue-400 animate-pulse">
-                    Active
+                  <div className="px-3 py-1 bg-purple-600/20 border border-purple-500 rounded-full text-sm text-purple-300 animate-pulse">
+                    🔮 Channeling
                   </div>
                 )}
               </div>

@@ -21,11 +21,11 @@ export default function EvaluationPage() {
     try {
       const data = await api.getEvaluation(evaluationId)
       setEvaluation(data)
-    } catch (error) {
-      console.error('Error fetching evaluation:', error)
-    } finally {
-      setLoading(false)
-    }
+      } catch (error) {
+        console.error('Error fetching evaluation:', error)
+      } finally {
+        setLoading(false)
+      }
   }, [evaluationId])
 
   useEffect(() => {
@@ -51,8 +51,8 @@ export default function EvaluationPage() {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-400">Loading evaluation...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <p className="mt-4 text-amber-300">🔮 Consulting the ancient scrolls...</p>
         </div>
       </div>
     )
@@ -62,7 +62,7 @@ export default function EvaluationPage() {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 text-xl">Evaluation not found</p>
+          <p className="text-red-400 text-xl">📜 This prophecy scroll has been lost to time</p>
         </div>
       </div>
     )
@@ -81,17 +81,19 @@ export default function EvaluationPage() {
       <div className="container mx-auto px-4 max-w-6xl">
         {/* Page Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2 text-white">{evaluation.name}</h1>
+          <h1 className="text-4xl font-bold mb-2 text-gradient">{evaluation.name}</h1>
           <div className="flex items-center space-x-4">
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              isRunning ? 'bg-yellow-500/20 text-yellow-400' :
-              isCompleted ? 'bg-green-500/20 text-green-400' :
-              isFailed ? 'bg-red-500/20 text-red-400' :
-              'bg-gray-500/20 text-gray-400'
+            <span className={`px-3 py-1 rounded-full text-sm font-medium border-2 ${
+              isRunning ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' :
+              isCompleted ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' :
+              isFailed ? 'bg-red-500/20 text-red-400 border-red-500/40' :
+              'bg-gray-500/20 text-gray-400 border-gray-500/40'
             }`}>
-              {evaluation.status.toUpperCase()}
+              {isRunning ? '🔮 CHANNELING' : isCompleted ? '✨ PROPHECY COMPLETE' : isFailed ? '❌ RITUAL FAILED' : evaluation.status.toUpperCase()}
             </span>
-            <span className="text-gray-500 text-sm">{evaluation.type}</span>
+            <span className="text-amber-300 text-sm">
+              {evaluation.type === 'application' ? '📜 Single Vendor' : '🏰 Multi-Vendor Quest'}
+            </span>
           </div>
         </div>
         
@@ -112,9 +114,9 @@ export default function EvaluationPage() {
               <svg className="w-6 h-6 text-red-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <h2 className="text-xl font-semibold text-red-400">Evaluation Failed</h2>
-            </div>
-            <p className="text-gray-300">{evaluation.error || 'Unknown error occurred'}</p>
+              <h2 className="text-xl font-semibold text-red-400">❌ Case Investigation Failed</h2>
+          </div>
+            <p className="text-gray-300">{evaluation.error || 'The investigation encountered an unknown obstacle'}</p>
           </Card>
         )}
 
@@ -124,78 +126,78 @@ export default function EvaluationPage() {
               <>
                 {evaluation.vendors?.[0]?.agent_outputs && (
                   <div className="grid md:grid-cols-2 gap-6">
-                    <Card>
-                      <h3 className="text-xl font-semibold mb-4 text-white">Dimension Scores</h3>
+                    <Card className="border-2 border-purple-500/30 magical-glow">
+                      <h3 className="text-xl font-semibold mb-4 text-gradient">🔮 Mystical Realm Scores</h3>
                       <ul className="text-gray-300 space-y-3">
                         <li className="flex justify-between items-center">
-                          <span>Compliance & Security:</span>
-                          <span className="font-semibold text-blue-400">
+                          <span>🔒 Guardian's Shield:</span>
+                          <span className="font-semibold text-purple-400">
                             {evaluation.vendors[0].agent_outputs?.compliance?.score?.toFixed(1) ?? '—'}/5.0
                           </span>
                         </li>
                         <li className="flex justify-between items-center">
-                          <span>Technical Interoperability:</span>
-                          <span className="font-semibold text-blue-400">
+                          <span>🔮 Weaver's Web:</span>
+                          <span className="font-semibold text-purple-400">
                             {evaluation.vendors[0].agent_outputs?.interoperability?.score?.toFixed(1) ?? '—'}/5.0
                           </span>
                         </li>
                         <li className="flex justify-between items-center">
-                          <span>Finance & TCO:</span>
-                          <span className="font-semibold text-blue-400">
+                          <span>💰 Golden Treasury:</span>
+                          <span className="font-semibold text-purple-400">
                             {evaluation.vendors[0].agent_outputs?.finance?.score?.toFixed(1) ?? '—'}/5.0
                           </span>
                         </li>
                         <li className="flex justify-between items-center">
-                          <span>Adoption & Support:</span>
-                          <span className="font-semibold text-blue-400">
+                          <span>🌟 Herald's Blessing:</span>
+                          <span className="font-semibold text-purple-400">
                             {evaluation.vendors[0].agent_outputs?.adoption?.score?.toFixed(1) ?? '—'}/5.0
                           </span>
                         </li>
-                        <li className="flex justify-between items-center pt-3 mt-3 border-t border-gray-700">
-                          <span className="font-semibold">Overall Score:</span>
-                          <span className="font-bold text-xl text-green-400">
+                        <li className="flex justify-between items-center pt-3 mt-3 border-t border-purple-500/30">
+                          <span className="font-semibold text-amber-200">⭐ Destiny Score:</span>
+                          <span className="font-bold text-xl text-amber-400">
                             {evaluation.vendors[0].total_score?.toFixed(1) ?? '—'}/5.0
                           </span>
                         </li>
                       </ul>
                     </Card>
-                    <Card>
-                      <h3 className="text-xl font-semibold mb-4 text-white">Key Findings</h3>
+                    <Card className="border-2 border-purple-500/30 magical-glow">
+                      <h3 className="text-xl font-semibold mb-4 text-gradient">📜 Sage Revelations</h3>
                       <div className="text-gray-300 space-y-3 text-sm">
                         <div>
-                          <p className="text-gray-400 font-medium mb-1">🔒 Compliance:</p>
+                          <p className="text-amber-300 font-medium mb-1">🔒 Guardian's Vision:</p>
                           <p className="text-gray-300">
-                            {(evaluation.vendors[0].agent_outputs?.compliance?.findings || []).slice(0, 2).join('; ') || 'No findings available'}
+                            {(evaluation.vendors[0].agent_outputs?.compliance?.findings || []).slice(0, 2).join('; ') || 'The mists reveal nothing'}
                           </p>
                         </div>
                         <div>
-                          <p className="text-gray-400 font-medium mb-1">🔧 Integration:</p>
+                          <p className="text-amber-300 font-medium mb-1">🔮 Weaver's Insight:</p>
                           <p className="text-gray-300">
-                            {(evaluation.vendors[0].agent_outputs?.interoperability?.findings || []).slice(0, 2).join('; ') || 'No findings available'}
+                            {(evaluation.vendors[0].agent_outputs?.interoperability?.findings || []).slice(0, 2).join('; ') || 'The threads remain unseen'}
                           </p>
                         </div>
                         <div>
-                          <p className="text-gray-400 font-medium mb-1">💰 Finance:</p>
+                          <p className="text-amber-300 font-medium mb-1">💰 Keeper's Wisdom:</p>
                           <p className="text-gray-300">
-                            {evaluation.vendors[0].agent_outputs?.finance?.notes || 'No notes available'}
+                            {evaluation.vendors[0].agent_outputs?.finance?.notes || 'The ledger holds no secrets'}
                           </p>
                         </div>
                         <div>
-                          <p className="text-gray-400 font-medium mb-1">🚀 Support:</p>
+                          <p className="text-amber-300 font-medium mb-1">🌟 Herald's Proclamation:</p>
                           <p className="text-gray-300">
-                            {evaluation.vendors[0].agent_outputs?.adoption?.notes || 'No notes available'}
+                            {evaluation.vendors[0].agent_outputs?.adoption?.notes || 'The bells remain silent'}
                           </p>
                         </div>
                       </div>
                     </Card>
-                  </div>
+              </div>
                 )}
                 
                 {evaluation.recommendation && (
-                  <Card>
-                    <h3 className="text-xl font-semibold mb-4 text-white">Recommendation</h3>
-                    <div className="bg-[#0f0f0f] rounded-lg p-4 border border-blue-500/20">
-                      <p className="text-gray-300">{evaluation.recommendation.reason || 'Evaluation completed'}</p>
+                  <Card className="border-2 border-purple-500/30 magical-glow">
+                    <h3 className="text-xl font-semibold mb-4 text-gradient">🔮 The Oracle's Prophecy</h3>
+                    <div className="bg-[#0f0f0f] rounded-lg p-4 border border-purple-500/20">
+                      <p className="text-amber-200">{evaluation.recommendation.reason || 'The prophecy has been fulfilled'}</p>
                     </div>
                   </Card>
                 )}
@@ -221,10 +223,10 @@ export default function EvaluationPage() {
                         </div>
                         <div>
                           <div className="text-xs font-semibold text-emerald-400 uppercase mb-1">
-                            AI-powered recommendation
+                            🕵️ INVESTIGATOR'S VERDICT
                           </div>
                           <div className="text-lg font-semibold text-emerald-100">
-                            Recommended: {recommendedVendor?.name || finalRec.recommended_vendor_id}
+                            Case Closed - Suspect Cleared: {recommendedVendor?.name || finalRec.recommended_vendor_id}
                           </div>
                         </div>
                       </div>
@@ -253,7 +255,7 @@ export default function EvaluationPage() {
                             AI-powered analysis
                           </div>
                           <div className="text-lg font-semibold text-amber-100">
-                            No safe recommendation (insufficient compliance data)
+                            ⚠️ Case Inconclusive - Insufficient Evidence
                           </div>
                         </div>
                       </div>
@@ -264,19 +266,19 @@ export default function EvaluationPage() {
                   );
                 })()}
 
-                <Card>
-                  <h2 className="text-2xl font-semibold mb-6 text-white">Vendor Comparison</h2>
+                <Card className="border-2 border-purple-500/30 magical-glow">
+                  <h2 className="text-2xl font-semibold mb-6 text-gradient">🏰 Realm Comparison Chronicle</h2>
                   {evaluation.vendors && evaluation.vendors.length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="w-full text-left">
                         <thead>
-                          <tr className="border-b border-gray-700">
-                            <th className="pb-3 text-gray-400 font-medium">Vendor</th>
-                            <th className="pb-3 text-gray-400 font-medium text-center">Compliance</th>
-                            <th className="pb-3 text-gray-400 font-medium text-center">Technical</th>
-                            <th className="pb-3 text-gray-400 font-medium text-center">Finance</th>
-                            <th className="pb-3 text-gray-400 font-medium text-center">Support</th>
-                            <th className="pb-3 text-gray-400 font-medium text-center">Overall</th>
+                          <tr className="border-b border-purple-500/30">
+                            <th className="pb-3 text-amber-300 font-medium">Vendor</th>
+                            <th className="pb-3 text-amber-300 font-medium text-center">🔒 Guardian</th>
+                            <th className="pb-3 text-amber-300 font-medium text-center">🔮 Weaver</th>
+                            <th className="pb-3 text-amber-300 font-medium text-center">💰 Keeper</th>
+                            <th className="pb-3 text-amber-300 font-medium text-center">🌟 Herald</th>
+                            <th className="pb-3 text-amber-300 font-medium text-center">⭐ Destiny</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -288,22 +290,22 @@ export default function EvaluationPage() {
                                   <p className="text-sm text-gray-500">{vendor.website}</p>
                                 </div>
                               </td>
-                              <td className="py-4 text-center text-gray-300">
+                              <td className="py-4 text-center text-purple-300">
                                 {vendor.agent_outputs?.compliance?.score?.toFixed(1) ?? '—'}
                               </td>
-                              <td className="py-4 text-center text-gray-300">
+                              <td className="py-4 text-center text-purple-300">
                                 {vendor.agent_outputs?.interoperability?.score?.toFixed(1) ?? '—'}
                               </td>
-                              <td className="py-4 text-center text-gray-300">
+                              <td className="py-4 text-center text-purple-300">
                                 {vendor.agent_outputs?.finance?.score?.toFixed(1) ?? '—'}
                               </td>
-                              <td className="py-4 text-center text-gray-300">
+                              <td className="py-4 text-center text-purple-300">
                                 {vendor.agent_outputs?.adoption?.score?.toFixed(1) ?? '—'}
                               </td>
                               <td className="py-4 text-center">
                                 <span className={`font-bold text-lg ${
                                   vendor.id === evaluation.recommendation?.vendor_id 
-                                    ? 'text-green-400' 
+                                    ? 'text-amber-400' 
                                     : 'text-gray-300'
                                 }`}>
                                   {vendor.total_score?.toFixed(1) ?? '—'}
@@ -315,8 +317,8 @@ export default function EvaluationPage() {
                       </table>
                     </div>
                   ) : (
-                    <div className="text-gray-400">
-                      <p>No vendor comparison data available</p>
+                    <div className="text-amber-300">
+                      <p>The crystal orb reveals no comparison data</p>
                     </div>
                   )}
                 </Card>
@@ -423,14 +425,14 @@ export default function EvaluationPage() {
             )}
 
             {evaluation.onboarding_checklist && evaluation.onboarding_checklist.length > 0 && (
-              <Card>
-                <h2 className="text-2xl font-semibold mb-6 text-white">Onboarding Checklist</h2>
+              <Card className="border-2 border-purple-500/30 magical-glow">
+                <h2 className="text-2xl font-semibold mb-6 text-gradient">📜 Quest Preparation Scroll</h2>
                 <div className="space-y-3">
                   {evaluation.onboarding_checklist.map((item: string, index: number) => (
-                    <div key={index} className="flex items-start space-x-3 p-3 bg-[#0f0f0f] rounded-lg border border-gray-800">
+                    <div key={index} className="flex items-start space-x-3 p-3 bg-[#0f0f0f] rounded-lg border border-purple-500/20">
                       <div className="flex-shrink-0 mt-1">
-                        <div className="w-5 h-5 border-2 border-blue-500 rounded flex items-center justify-center">
-                          <svg className="w-3 h-3 text-blue-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="w-5 h-5 border-2 border-purple-500 rounded flex items-center justify-center">
+                          <svg className="w-3 h-3 text-purple-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         </div>
@@ -438,7 +440,7 @@ export default function EvaluationPage() {
                       <p className="text-gray-300 flex-1">{item}</p>
                     </div>
                   ))}
-                </div>
+              </div>
               </Card>
             )}
           </div>

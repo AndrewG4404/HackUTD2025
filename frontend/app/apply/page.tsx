@@ -137,10 +137,10 @@ export default function ApplyPage() {
   const canSubmit = canProceedStep1
 
   const steps = [
-    { number: 1, title: 'Company Information', current: currentStep === 1 },
-    { number: 2, title: 'Product Details', current: currentStep === 2 },
-    { number: 3, title: 'Documents', current: currentStep === 3 },
-    { number: 4, title: 'Review & Submit', current: currentStep === 4 },
+    { number: 1, title: 'Chapter I: Origins', current: currentStep === 1 },
+    { number: 2, title: 'Chapter II: The Offering', current: currentStep === 2 },
+    { number: 3, title: 'Chapter III: Sacred Scrolls', current: currentStep === 3 },
+    { number: 4, title: 'Chapter IV: The Prophecy', current: currentStep === 4 },
   ]
 
   const progressPercentage = (currentStep / steps.length) * 100
@@ -152,21 +152,21 @@ export default function ApplyPage() {
         {/* Header */}
         <div className="mb-12 text-center">
           <h1 className="text-5xl font-bold mb-4 text-white">
-            Welcome to <span className="text-gradient">VendorLens</span>
+            ✨ Begin Your <span className="text-gradient">Mystical Journey</span>
           </h1>
-          <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-            Let's get your company onboarded with Goldman Sachs. This will only take a few minutes.
+          <p className="text-xl text-amber-200/80 max-w-2xl mx-auto">
+            Step through the portal. Share your tale so the Seven Sages may divine your company's destiny.
           </p>
           
           {/* Progress Indicator */}
           <div className="mt-6 max-w-md mx-auto">
-            <div className="flex justify-between text-sm text-gray-400 mb-2">
-              <span>{progressPercentage.toFixed(0)}% Complete</span>
-              <span>~{estimatedTimeRemaining} min remaining</span>
+            <div className="flex justify-between text-sm text-amber-300 mb-2">
+              <span>📜 Journey Progress: {progressPercentage.toFixed(0)}% Complete</span>
+              <span>⏳ ~{estimatedTimeRemaining} min remaining</span>
             </div>
-            <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden border border-purple-500/30">
               <div 
-                className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-500 ease-out"
+                className="h-full bg-gradient-to-r from-purple-600 via-pink-500 to-amber-500 transition-all duration-500 ease-out"
                 style={{ width: `${progressPercentage}%` }}
               />
             </div>
@@ -182,12 +182,12 @@ export default function ApplyPage() {
                 <div className="flex flex-col items-center" style={{ width: '140px' }}>
                   {/* Circle */}
                   <div className={`
-                    w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all
+                    w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all border-2
                     ${step.current 
-                      ? 'bg-blue-600 text-white ring-4 ring-blue-600/30' 
+                      ? 'bg-purple-600 text-white ring-4 ring-purple-500/40 border-amber-400' 
                       : currentStep > step.number
-                      ? 'bg-green-600 text-white'
-                      : 'bg-gray-700 text-gray-400'
+                      ? 'bg-gradient-to-br from-purple-600 to-pink-600 text-white border-amber-300'
+                      : 'bg-gray-700 text-gray-400 border-gray-600'
                     }
                   `}>
                     {currentStep > step.number ? (
@@ -199,7 +199,7 @@ export default function ApplyPage() {
                     )}
                   </div>
                   {/* Label */}
-                  <p className={`mt-3 text-sm font-medium text-center ${step.current ? 'text-white' : 'text-gray-500'}`}>
+                  <p className={`mt-3 text-sm font-medium text-center ${step.current ? 'text-amber-200' : 'text-gray-500'}`}>
                     {step.title}
                   </p>
                 </div>
@@ -207,7 +207,7 @@ export default function ApplyPage() {
                 {/* Connecting Line */}
                 {index < steps.length - 1 && (
                   <div 
-                    className={`h-1 transition-all ${currentStep > step.number ? 'bg-green-600' : 'bg-gray-700'}`}
+                    className={`h-1 transition-all ${currentStep > step.number ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gray-700'}`}
                     style={{ width: '80px', marginBottom: '50px' }}
                   />
                 )}
@@ -217,14 +217,14 @@ export default function ApplyPage() {
         </div>
 
         {/* Form Card */}
-        <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-2xl p-8 shadow-2xl">
+        <div className="backdrop-blur-xl bg-black/30 border-2 border-purple-500/30 rounded-2xl p-8 shadow-2xl magical-glow">
           <form onSubmit={handleSubmit}>
             {/* Step 1: Company Information */}
             {currentStep === 1 && (
               <div className="space-y-6 animate-fade-in">
                 <div className="mb-6">
-                  <h2 className="text-2xl font-bold text-white mb-2">Tell us about your company</h2>
-                  <p className="text-gray-400">We need some basic information to get started</p>
+                  <h2 className="text-2xl font-bold text-gradient mb-2">📜 Chapter I: Origins</h2>
+                  <p className="text-amber-200/70">Inscribe the origins of your company into the ancient records</p>
                 </div>
 
                 <div className="space-y-5">
@@ -346,8 +346,8 @@ export default function ApplyPage() {
             {currentStep === 2 && (
               <div className="space-y-6 animate-fade-in">
                 <div className="mb-6">
-                  <h2 className="text-2xl font-bold text-white mb-2">Product Information</h2>
-                  <p className="text-gray-400">Tell us about what you're offering (optional but recommended)</p>
+                  <h2 className="text-2xl font-bold text-gradient mb-2">✨ Chapter II: The Offering</h2>
+                  <p className="text-amber-200/70">Reveal the magic your company brings to the realm (optional but enhances the prophecy)</p>
                 </div>
 
                 <div className="space-y-5">
@@ -402,8 +402,8 @@ export default function ApplyPage() {
             {currentStep === 3 && (
               <div className="space-y-6 animate-fade-in">
                 <div className="mb-6">
-                  <h2 className="text-2xl font-bold text-white mb-2">Supporting Documents</h2>
-                  <p className="text-gray-400">Upload documents or provide links to help us evaluate your company</p>
+                  <h2 className="text-2xl font-bold text-gradient mb-2">📜 Chapter III: Sacred Scrolls</h2>
+                  <p className="text-amber-200/70">Present the ancient scrolls and sacred texts for the Sages' divination</p>
                 </div>
 
                 <div className="space-y-5">
@@ -458,21 +458,21 @@ export default function ApplyPage() {
             {currentStep === 4 && (
               <div className="space-y-6 animate-fade-in">
                 <div className="mb-6">
-                  <h2 className="text-2xl font-bold text-white mb-2">Review Your Application</h2>
-                  <p className="text-gray-400">Please review your information before submitting</p>
+                  <h2 className="text-2xl font-bold text-gradient mb-2">🔮 Chapter IV: The Prophecy</h2>
+                  <p className="text-amber-200/70">Review your tale before the Sages divine your destiny</p>
                 </div>
 
                 <div className="space-y-4">
                   {/* Company Info Review */}
-                  <div className="bg-black/30 rounded-xl p-6 border border-white/10">
+                  <div className="bg-black/30 rounded-xl p-6 border border-purple-500/20">
                     <div className="flex justify-between items-start mb-4">
-                      <h3 className="text-lg font-semibold text-white">Company Information</h3>
+                      <h3 className="text-lg font-semibold text-amber-200">📜 Origins</h3>
                       <button
                         type="button"
                         onClick={() => setCurrentStep(1)}
-                        className="text-blue-400 hover:text-blue-300 text-sm"
+                        className="text-purple-400 hover:text-purple-300 text-sm"
                       >
-                        Edit
+                        ✏️ Edit
                       </button>
                     </div>
                     <div className="space-y-2 text-gray-300 text-sm">
@@ -499,15 +499,15 @@ export default function ApplyPage() {
 
                   {/* Product Info Review */}
                   {(formData.product_name || formData.product_description) && (
-                    <div className="bg-black/30 rounded-xl p-6 border border-white/10">
+                    <div className="bg-black/30 rounded-xl p-6 border border-purple-500/20">
                       <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-lg font-semibold text-white">Product Information</h3>
+                        <h3 className="text-lg font-semibold text-amber-200">✨ The Offering</h3>
                         <button
                           type="button"
                           onClick={() => setCurrentStep(2)}
-                          className="text-blue-400 hover:text-blue-300 text-sm"
+                          className="text-purple-400 hover:text-purple-300 text-sm"
                         >
-                          Edit
+                          ✏️ Edit
                         </button>
                       </div>
                       <div className="space-y-2 text-gray-300 text-sm">
@@ -528,15 +528,15 @@ export default function ApplyPage() {
                   )}
 
                   {/* Documents Review */}
-                  <div className="bg-black/30 rounded-xl p-6 border border-white/10">
+                  <div className="bg-black/30 rounded-xl p-6 border border-purple-500/20">
                     <div className="flex justify-between items-start mb-4">
-                      <h3 className="text-lg font-semibold text-white">Documents</h3>
+                      <h3 className="text-lg font-semibold text-amber-200">📜 Sacred Scrolls</h3>
                       <button
                         type="button"
                         onClick={() => setCurrentStep(3)}
-                        className="text-blue-400 hover:text-blue-300 text-sm"
+                        className="text-purple-400 hover:text-purple-300 text-sm"
                       >
-                        Edit
+                        ✏️ Edit
                       </button>
                     </div>
                     <div className="space-y-2 text-gray-300 text-sm">
@@ -554,9 +554,9 @@ export default function ApplyPage() {
                   </div>
                 </div>
 
-                <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mt-6">
-                  <p className="text-blue-300 text-sm">
-                    ℹ️ Once submitted, our AI agents will begin evaluating your application. This typically takes 5-8 minutes.
+                <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mt-6">
+                  <p className="text-purple-300 text-sm">
+                    🔮 Once submitted, the Seven Sages will begin their mystical divination. The prophecy typically manifests within 5-8 minutes.
                   </p>
                 </div>
 
@@ -574,17 +574,17 @@ export default function ApplyPage() {
                     disabled={loading || !canSubmit}
                     className="px-8"
                   >
-                    {loading ? (
-                      <span className="flex items-center">
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Submitting...
-                      </span>
-                    ) : (
-                      '🚀 Submit Application'
-                    )}
+                        {loading ? (
+                          <span className="flex items-center">
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            ✨ Summoning the Sages...
+                          </span>
+                        ) : (
+                          '🔮 Summon the Seven Sages'
+                        )}
                   </Button>
                 </div>
               </div>
@@ -598,11 +598,11 @@ export default function ApplyPage() {
         isOpen={showSuccessModal}
         onClose={() => setShowSuccessModal(false)}
         type="success"
-        title="Application Submitted!"
+        title="✨ The Portal Awakens!"
         showCloseButton={false}
       >
-        <p className="mb-4">Your application has been submitted successfully.</p>
-        <p className="text-sm text-gray-400">Redirecting to evaluation page...</p>
+        <p className="mb-4">Your tale has been inscribed in the ancient tome. The Seven Sages have begun their divination.</p>
+        <p className="text-sm text-amber-300">Opening your prophecy scroll...</p>
       </Modal>
 
       {/* Error Modal */}
