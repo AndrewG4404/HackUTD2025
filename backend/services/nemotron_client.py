@@ -1,15 +1,18 @@
 """
 Nemotron API client using NVIDIA API endpoints
 Uses OpenAI-compatible interface
-Enhanced with multi-step RAG capabilities
+Enhanced with multi-step RAG capabilities using Brave Search API
+Includes smart caching and rate limiting for production reliability
 """
 import os
 import httpx
 import json
-from typing import Dict, Any, Optional, List, Tuple
+import asyncio
+from typing import Dict, Any, Optional, List
 from openai import OpenAI
 from bs4 import BeautifulSoup
 from datetime import datetime
+from urllib.parse import urlparse
 
 
 class NemotronClient:
@@ -98,7 +101,8 @@ class NemotronClient:
     
     def fetch_url(self, url: str, max_chars: int = 10000) -> str:
         """
-        Fetch and extract text content from a URL.
+        Fetch and extract text content from a URL with browser-like headers.
+        Robust against blocks, timeouts, and HTTP/2 issues.
         
         Args:
             url: URL to fetch
@@ -108,28 +112,110 @@ class NemotronClient:
             Extracted text content
         """
         try:
-            response = httpx.get(url, timeout=10.0, follow_redirects=True)
-            response.raise_for_status()
+            # Use realistic browser headers to avoid 403s/blocks
+            headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Cache-Control": "max-age=0",
+            }
             
-            # Parse HTML and extract text
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Remove script and style elements
-            for script in soup(["script", "style", "nav", "footer", "header"]):
-                script.decompose()
-            
-            # Get text
-            text = soup.get_text()
-            
-            # Clean up whitespace
-            lines = (line.strip() for line in text.splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text = ' '.join(chunk for chunk in chunks if chunk)
-            
-            return text[:max_chars]
+            # Always start with HTTP/1.1 (more reliable for hackathon)
+            # HTTP/2 can cause StreamReset issues with CDNs/WAFs
+            response = None
+            try:
+                with httpx.Client(
+                    timeout=20.0,
+                    follow_redirects=True,
+                    headers=headers,
+                    http2=False,  # Use HTTP/1.1 for reliability
+                    limits=httpx.Limits(max_connections=10)
+                ) as client:
+                    response = client.get(url)
+                    response.raise_for_status()
+                    
+                    # Parse HTML and extract text
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    # Remove script and style elements
+                    for el in soup(["script", "style", "nav", "footer", "header"]):
+                        el.decompose()
+                    
+                    # Get text with separator
+                    text = soup.get_text(separator=" ")
+                    
+                    # Clean up whitespace
+                    lines = (line.strip() for line in text.splitlines())
+                    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                    text = ' '.join(chunk for chunk in chunks if chunk)
+                    
+                    return text[:max_chars]
+                    
+            except httpx.HTTPStatusError as e:
+                print(f"[fetch_url] HTTP error for {url}: {e.response.status_code}")
+                return f"Error fetching URL: HTTP {e.response.status_code}"
+            except httpx.TimeoutException:
+                print(f"[fetch_url] Timeout fetching {url}")
+                return "Error fetching URL: Timeout"
+            except Exception as e:
+                print(f"[fetch_url] Error fetching {url}: {e}")
+                return f"Error fetching URL: {str(e)}"
+                
         except Exception as e:
-            print(f"Error fetching URL {url}: {e}")
+            print(f"[fetch_url] Unexpected error for {url}: {e}")
             return f"Error fetching URL: {str(e)}"
+    
+    async def search_web(
+        self,
+        query: str,
+        max_results: int = 5,
+        site_hint: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
+        """
+        Perform web search using Brave Search API (1 req/sec, 1000 req/month).
+        
+        Features:
+        - Smart caching: identical queries reuse cached results
+        - Global throttling: respects 1 req/sec rate limit
+        - Graceful degradation: returns empty list on errors
+        
+        Args:
+            query: Search query string
+            max_results: Maximum number of results to return (default: 5)
+            site_hint: Optional website to focus search on
+        
+        Returns:
+            List of dicts with keys: title, url, snippet
+        """
+        from services import search_client
+        
+        print(f"[NemotronClient] 🔍 Web search: {query[:80]}...")
+        
+        results = await search_client.search_web(
+            query=query,
+            max_results=max_results,
+            site_hint=site_hint
+        )
+        
+        print(f"[NemotronClient] ✅ Search complete: {len(results)} results")
+        
+        # Convert to format expected by rest of code (url/href compatibility)
+        for r in results:
+            r["href"] = r.get("url", "")
+            r["body"] = r.get("snippet", "")
+        
+        return results
     
     def discover_documentation_urls(self, base_website: str, doc_type: str) -> List[str]:
         """
@@ -192,129 +278,135 @@ If the base website is https://example.com and you find /pricing, return https:/
             print(f"[NemotronClient] Error discovering URLs: {e}")
             return self._get_fallback_urls(base_website, doc_type)
     
+    def _base_domain(self, base_website: str) -> str:
+        """Extract base domain from website URL, stripping www."""
+        parsed = urlparse(base_website)
+        host = parsed.netloc or parsed.path
+        # Strip www. prefix
+        return host.replace("www.", "")
+    
+    def _vendor_subdomains(self, base_website: str) -> List[str]:
+        """
+        Generate list of common vendor subdomains for documentation discovery.
+        Returns full URLs with https:// for common doc subdomains.
+        """
+        d = self._base_domain(base_website)
+        # Common documentation/official subdomains across SaaS vendors
+        subs = [
+            f"https://docs.{d}",
+            f"https://developer.{d}",
+            f"https://developers.{d}",
+            f"https://help.{d}",
+            f"https://support.{d}",
+            f"https://community.{d}",
+            f"https://trust.{d}",
+            f"https://resources.{d}",
+            f"https://learn.{d}",
+            f"https://customers.{d}",
+            f"https://status.{d}",
+            # Keep the original root as last resort
+            f"https://www.{d}",
+            f"https://{d}",
+        ]
+        # De-duplicate while preserving order
+        seen, out = set(), []
+        for s in subs:
+            if s not in seen:
+                seen.add(s)
+                out.append(s)
+        return out
+    
     def _get_fallback_urls(self, base_website: str, doc_type: str) -> List[str]:
-        """Generate fallback documentation URLs based on common patterns."""
+        """Generate fallback documentation URLs based on common patterns and subdomains."""
         from urllib.parse import urljoin
         
         patterns = {
             "privacy": ["/privacy-policy", "/privacy", "/legal/privacy", "/data-protection"],
-            "pricing": ["/pricing", "/plans", "/pricing-plans", "/cost"],
-            "api": ["/docs", "/api", "/developers", "/api-docs", "/documentation"],
-            "support": ["/support", "/help", "/resources", "/training"],
+            "pricing": ["/pricing", "/plans", "/pricing-plans", "/editions-pricing"],
+            "api": ["/docs", "/api", "/developers", "/developer", "/documentation"],
+            "support": ["/support", "/help", "/resources", "/training", "/knowledge"],
             "compliance": ["/security", "/compliance", "/trust", "/certifications"],
             "technical": ["/docs", "/documentation", "/technical-docs", "/integration"]
         }
         
-        paths = patterns.get(doc_type, [f"/{doc_type}"])
-        return [urljoin(base_website, path) for path in paths[:3]]
+        paths = patterns.get(doc_type, [f"/{doc_type}"])[:3]
+        
+        # Generate URLs across multiple subdomains
+        urls = []
+        for root in self._vendor_subdomains(base_website):
+            for p in paths:
+                urls.append(urljoin(root, p))
+        return urls[:10]  # Limit to 10 URLs
     
-    def search_with_followup(
+    async def search_with_followup(
         self,
         initial_query: str,
         vendor_name: str,
         base_website: str,
-        max_hops: int = 3
+        max_hops: int = 1  # Now defaults to 1 to save API calls
     ) -> List[Dict[str, Any]]:
         """
-        Multi-step search with intelligent follow-up queries.
-        Max 3 hops to prevent infinite loops.
+        Single comprehensive search (simplified from multi-hop to save API quota).
+        For hackathon: does ONE targeted search and fetches top results.
         
         Args:
-            initial_query: Initial search query (e.g., "ServiceNow SAML SSO Okta")
+            initial_query: Search query (e.g., "ServiceNow SAML SSO Okta")
             vendor_name: Vendor name for context
             base_website: Vendor website
-            max_hops: Maximum follow-up searches (default 3)
+            max_hops: Ignored (kept for backward compatibility)
         
         Returns:
             List of source dicts with {url, title, content, excerpt, credibility, accessed_at}
         """
         sources = []
-        queries = [initial_query]
         
-        for hop in range(max_hops):
-            if hop >= len(queries):
-                break
+        print(f"[NemotronClient] Single comprehensive search: {initial_query}")
+        
+        # Do ONE web search (with site hint for better results)
+        search_results = await self.search_web(
+            query=f"{vendor_name} {initial_query}",
+            max_results=5,
+            site_hint=base_website
+        )
+        
+        # Fetch top 3 URLs
+        for result in search_results[:3]:
+            url = result.get("href") or result.get("url", "")
+            if not url:
+                continue
             
-            query = queries[hop]
-            print(f"[NemotronClient] Search hop {hop + 1}/{max_hops}: {query}")
-            
-            # Try to find relevant URLs
-            urls = self._discover_urls_for_query(query, vendor_name, base_website)
-            
-            for url in urls[:2]:  # Limit to 2 URLs per hop
-                try:
-                    content = self.fetch_url(url, max_chars=8000)
-                    
-                    # Skip if error or very short
-                    if "Error fetching URL" in content or len(content) < 100:
-                        continue
-                    
-                    # Extract relevant excerpt
-                    excerpt = self._extract_relevant_excerpt(content, query)
-                    
-                    # Judge credibility
-                    credibility = self._judge_source_credibility(url, vendor_name)
-                    
-                    source = {
-                        "url": url,
-                        "title": self._extract_title(url, content),
-                        "content": content,
-                        "excerpt": excerpt,
-                        "credibility": credibility,
-                        "accessed_at": datetime.utcnow().isoformat(),
-                        "query": query
-                    }
-                    sources.append(source)
-                    
-                    # Generate follow-up query if needed and we haven't hit max hops
-                    if hop < max_hops - 1:
-                        followup = self._generate_followup_query(query, excerpt, vendor_name)
-                        if followup and followup not in queries:
-                            queries.append(followup)
-                    
-                except Exception as e:
-                    print(f"[NemotronClient] Error processing {url}: {e}")
+            try:
+                content = self.fetch_url(url, max_chars=8000)
+                
+                # Skip if error or very short
+                if "Error fetching URL" in content or len(content) < 100:
                     continue
+                
+                # Extract relevant excerpt
+                excerpt = self._extract_relevant_excerpt(content, initial_query)
+                
+                # Judge credibility
+                credibility = self._judge_source_credibility(url, vendor_name)
+                
+                source = {
+                    "url": url,
+                    "title": result.get("title", "") or self._extract_title(url, content),
+                    "content": content,
+                    "excerpt": excerpt,
+                    "credibility": credibility,
+                    "accessed_at": datetime.utcnow().isoformat(),
+                    "query": initial_query
+                }
+                sources.append(source)
+                
+            except Exception as e:
+                print(f"[NemotronClient] Error processing {url}: {e}")
+                continue
         
         print(f"[NemotronClient] Search complete: {len(sources)} sources found")
         return sources
     
-    def _discover_urls_for_query(self, query: str, vendor_name: str, base_website: str) -> List[str]:
-        """Discover URLs relevant to a specific query."""
-        try:
-            # Use LLM to suggest URLs based on query
-            prompt = f"""Given this search query: "{query}" for vendor "{vendor_name}" (website: {base_website})
-
-Suggest 2-3 most likely URLs where this information would be found.
-Return JSON: {{"urls": ["url1", "url2", ...]}}
-
-Examples:
-- For "ServiceNow SAML SSO" -> ["https://docs.servicenow.com/bundle/...", "https://www.servicenow.com/security"]
-- For "Salesforce pricing Enterprise" -> ["https://www.salesforce.com/editions-pricing/", "https://www.salesforce.com/pricing"]
-"""
-            
-            messages = [
-                {"role": "system", "content": "You are a documentation discovery assistant. Return valid JSON only."},
-                {"role": "user", "content": prompt}
-            ]
-            
-            response = self.chat_completion_json(messages, temperature=0.3, max_tokens=300)
-            
-            if isinstance(response, str):
-                result = json.loads(response)
-            else:
-                result = response
-            
-            urls = result.get("urls", [])
-            
-            # If no URLs, try fallback based on query keywords
-            if not urls:
-                urls = self._query_to_fallback_urls(query, base_website)
-            
-            return urls[:3]
-        except Exception as e:
-            print(f"[NemotronClient] Error discovering URLs for query: {e}")
-            return self._query_to_fallback_urls(query, base_website)
+    # _discover_urls_for_query removed - now using direct Brave Search with site_hint
     
     def _query_to_fallback_urls(self, query: str, base_website: str) -> List[str]:
         """Generate fallback URLs based on query keywords."""
@@ -335,6 +427,42 @@ Examples:
             paths = ["/docs", "/documentation"]
         
         return [urljoin(base_website, path) for path in paths[:3]]
+    
+    def _query_intent_fallback(self, query: str, base_website: str) -> List[str]:
+        """
+        Smart subdomain-based fallback using query intent detection.
+        Tries multiple vendor subdomains with paths matching query intent.
+        """
+        from urllib.parse import urljoin
+        
+        roots = self._vendor_subdomains(base_website)
+        q = query.lower()
+        candidate_paths = []
+        
+        # Match query intent to likely documentation paths
+        if any(k in q for k in ["sso", "saml", "oauth", "scim", "okta", "mfa", "authentication"]):
+            candidate_paths = ["/security", "/trust", "/sso", "/identity", "/docs", "/api"]
+        elif any(k in q for k in ["api", "graphql", "sdk", "webhook", "developer", "rest"]):
+            candidate_paths = ["/docs", "/api", "/developers", "/developer", "/documentation", "/webhooks"]
+        elif any(k in q for k in ["pricing", "cost", "editions", "plans"]):
+            candidate_paths = ["/pricing", "/plans", "/pricing-plans", "/editions-pricing"]
+        elif any(k in q for k in ["privacy", "gdpr", "ccpa", "hipaa", "data retention", "deletion"]):
+            candidate_paths = ["/privacy", "/legal/privacy", "/security", "/trust", "/compliance", "/data-protection"]
+        elif any(k in q for k in ["support", "training", "help", "implementation"]):
+            candidate_paths = ["/support", "/help", "/training", "/resources", "/learn"]
+        elif any(k in q for k in ["compliance", "certification", "soc2", "iso"]):
+            candidate_paths = ["/trust", "/security", "/compliance", "/certifications"]
+        else:
+            # Generic fallback
+            candidate_paths = ["/docs", "/documentation", "/resources", "/support", "/help"]
+        
+        # Generate URLs across subdomains
+        urls = []
+        for root in roots:
+            for path in candidate_paths[:3]:  # Top 3 paths per subdomain
+                urls.append(urljoin(root, path))
+        
+        return urls[:10]  # Return top 10
     
     def _extract_relevant_excerpt(self, content: str, query: str, max_length: int = 500) -> str:
         """Extract most relevant excerpt from content based on query."""
@@ -428,10 +556,16 @@ Examples:
             
             response = self.chat_completion_json(messages, temperature=0.3, max_tokens=100)
             
+            if response is None:
+                return None
+            
             if isinstance(response, str):
                 result = json.loads(response)
             else:
                 result = response
+            
+            if not isinstance(result, dict):
+                return None
             
             followup = result.get("followup", "").strip()
             return followup if followup and len(followup) > 5 else None
@@ -451,4 +585,17 @@ def get_nemotron_client() -> NemotronClient:
     if _nemotron_client is None:
         _nemotron_client = NemotronClient()
     return _nemotron_client
+
+
+def get_search_cache_stats() -> Dict[str, Any]:
+    """Get statistics about the search cache (useful for debugging)"""
+    from services import search_client
+    return search_client.get_cache_stats()
+
+
+def clear_search_cache():
+    """Clear the search cache (useful for testing)"""
+    from services import search_client
+    search_client.clear_cache()
+    print("[NemotronClient] 🗑️  Search cache cleared")
 

@@ -22,9 +22,9 @@ class AdoptionAgent(BaseAgent):
     def __init__(self, event_callback=None):
         super().__init__("AdoptionAgent", "Customer Success Manager", event_callback)
     
-    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Evaluate adoption factors using enhanced RAG.
+        Evaluate adoption factors using single comprehensive search.
         """
         vendor = context.get("vendor", {})
         evaluation = context.get("evaluation", {})
@@ -37,44 +37,28 @@ class AdoptionAgent(BaseAgent):
         
         findings = []
         
-        # 1. Implementation timeline
-        self.emit_event("agent_thinking", {"action": "Researching implementation timeline"})
-        impl_info = self.research_requirement(
-            f"{company_name} implementation timeline deployment time to value onboarding",
+        # ONE comprehensive adoption query
+        self.emit_event("agent_thinking", {"action": "Researching comprehensive adoption factors"})
+        adoption_info = await self.research_requirement(
+            f"{company_name} implementation timeline deployment time to value onboarding "
+            f"customer support 24/7 support SLA response time "
+            f"training documentation certification courses learning resources "
+            f"user community forum partner ecosystem marketplace",
             company_name,
             website
         )
-        impl_findings = self._analyze_implementation(impl_info, company_name)
+        
+        # Analyze all aspects from the single search
+        impl_findings = self._analyze_implementation(adoption_info, company_name)
         findings.extend(impl_findings)
         
-        # 2. Support availability
-        self.emit_event("agent_thinking", {"action": "Researching support options"})
-        support_info = self.research_requirement(
-            f"{company_name} customer support 24/7 support SLA response time",
-            company_name,
-            website
-        )
-        support_findings = self._analyze_support(support_info, company_name)
+        support_findings = self._analyze_support(adoption_info, company_name)
         findings.extend(support_findings)
         
-        # 3. Training and documentation
-        self.emit_event("agent_thinking", {"action": "Researching training resources"})
-        training_info = self.research_requirement(
-            f"{company_name} training documentation certification courses learning resources",
-            company_name,
-            website
-        )
-        training_findings = self._analyze_training(training_info, company_name)
+        training_findings = self._analyze_training(adoption_info, company_name)
         findings.extend(training_findings)
         
-        # 4. Community and ecosystem
-        self.emit_event("agent_thinking", {"action": "Researching community"})
-        community_info = self.research_requirement(
-            f"{company_name} user community forum partner ecosystem marketplace",
-            company_name,
-            website
-        )
-        community_findings = self._analyze_community(community_info, company_name)
+        community_findings = self._analyze_community(adoption_info, company_name)
         findings.extend(community_findings)
         
         # Calculate score
@@ -83,17 +67,28 @@ class AdoptionAgent(BaseAgent):
         # Generate notes
         notes = self._generate_adoption_notes(findings, company_name)
         
+        # Generate management-friendly summary
+        summary = self._generate_executive_summary(findings, score, company_name, impl_findings)
+        
+        # Extract key strengths and risks
+        strengths = [f for f in findings if any(kw in f.lower() for kw in ["24/7", "comprehensive", "excellent", "extensive", "certification", "training"])][:4]
+        risks = [f for f in findings if any(kw in f.lower() for kw in ["limited", "not", "unable", "unclear", "unavailable", "poor"])][:4]
+        
         # Create structured output
         output = self.create_structured_output(
             score=score,
             findings=findings,
             notes=notes,
+            summary=summary,
+            strengths=strengths,
+            risks=risks,
             timeline=self._extract_timeline(impl_findings)
         )
         
         self.emit_event("agent_complete", {
             "status": "completed",
             "score": score,
+            "summary": summary,
             "findings_count": len(findings),
             "sources_count": len(self.sources)
         })
@@ -280,3 +275,20 @@ Return JSON: {{"community_findings": ["finding1", "finding2", ...]}}
             return f"Limited adoption information available for {vendor_name}. Support, training, and implementation details require direct vendor consultation."
         
         return f"Adoption assessment based on {len(self.sources)} sources. {len(findings)} factors evaluated. Training and support resources {'well-documented' if len(self.sources) >= 3 else 'partially documented'}. Confidence: {self._calculate_confidence()}"
+    
+    def _generate_executive_summary(self, findings: List[str], score: float, vendor_name: str, impl_findings: List[str]) -> str:
+        """Generate a 2-3 sentence executive summary suitable for management."""
+        timeline = self._extract_timeline(impl_findings)
+        support_count = sum(1 for f in findings if "support" in f.lower() or "training" in f.lower())
+        
+        if score >= 4.0:
+            return f"{vendor_name} provides excellent adoption support with comprehensive training resources, {timeline} implementation timeline, and strong customer success programs. Low organizational change risk with well-documented onboarding path."
+        elif score >= 3.0:
+            return f"{vendor_name} offers solid adoption resources with {support_count} documented support and training options. Implementation timeline of {timeline} is reasonable, though some organizational change management will be required."
+        elif score >= 2.0:
+            return f"{vendor_name} has limited publicly available adoption resources. {timeline} implementation timeline estimated; plan for significant internal training development and extended onboarding period."
+        else:
+            if len(self.sources) == 0:
+                return f"Adoption resources for {vendor_name} not accessible in public documentation. Support plans, training materials, implementation timelines, and customer success programs must be evaluated through direct vendor engagement."
+            else:
+                return f"{vendor_name} adoption posture is concerning with minimal training resources and unclear implementation support. High organizational risk for {timeline} deployment without substantial internal resources and vendor-led professional services."

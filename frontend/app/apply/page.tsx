@@ -43,18 +43,20 @@ export default function ApplyPage() {
         docs: files.length > 0 ? files : undefined,
       }
 
+      console.log('[Apply] Creating application...')
       const response = await api.createApplication(applicationData)
       const evaluationId = response.id
+      console.log('[Apply] Application created:', evaluationId)
 
-      await api.runApplicationWorkflow(evaluationId)
-
+      // Don't set loading to false before redirect - let the page change happen
+      // The SSE stream will auto-trigger when the evaluation detail page connects
+      console.log('[Apply] Redirecting to evaluation page...')
       router.push(`/evaluations/${evaluationId}`)
     } catch (error) {
-      console.error('Error submitting application:', error)
+      console.error('[Apply] Error submitting application:', error)
       const errorMessage = error instanceof Error ? error.message : 'Error submitting application. Please try again.'
       alert(errorMessage)
-    } finally {
-      setLoading(false)
+      setLoading(false) // Only set loading false on error
     }
   }
 

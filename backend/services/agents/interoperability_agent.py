@@ -22,9 +22,9 @@ class InteroperabilityAgent(BaseAgent):
     def __init__(self, event_callback=None):
         super().__init__("InteroperabilityAgent", "Integration Architect", event_callback)
     
-    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Evaluate technical integration capabilities using enhanced RAG.
+        Evaluate technical integration capabilities using single comprehensive search.
         """
         vendor = context.get("vendor", {})
         evaluation = context.get("evaluation", {})
@@ -40,63 +40,42 @@ class InteroperabilityAgent(BaseAgent):
         # Extract required integrations from use case
         required_integrations = self._extract_integration_requirements(use_case)
         
-        # 1. SSO/Authentication
-        self.emit_event("agent_thinking", {"action": "Researching SSO capabilities"})
-        sso_info = self.research_requirement(
-            f"{company_name} SAML SSO OAuth SCIM Okta Active Directory integration",
+        # Build comprehensive query including specific integrations from use case
+        specific_integrations = []
+        if use_case:
+            if "slack" in use_case.lower():
+                specific_integrations.append("Slack")
+            if "jira" in use_case.lower():
+                specific_integrations.append("Jira")
+            if "snowflake" in use_case.lower():
+                specific_integrations.append("Snowflake")
+        
+        integration_str = " ".join(specific_integrations)
+        
+        # ONE comprehensive integration query
+        self.emit_event("agent_thinking", {"action": "Researching comprehensive integration capabilities"})
+        interop_info = await self.research_requirement(
+            f"{company_name} SAML SSO OAuth SCIM Okta Active Directory "
+            f"REST API GraphQL SOAP API documentation developer SDK "
+            f"webhooks outbound events event streams notifications "
+            f"{integration_str} integration marketplace",
             company_name,
             website
         )
-        sso_findings = self._analyze_sso(sso_info, company_name, required_integrations)
+        
+        # Analyze all aspects from the single search
+        sso_findings = self._analyze_sso(interop_info, company_name, required_integrations)
         findings.extend(sso_findings)
         
-        # 2. APIs and SDKs
-        self.emit_event("agent_thinking", {"action": "Researching API capabilities"})
-        api_info = self.research_requirement(
-            f"{company_name} REST API GraphQL SOAP API documentation developer SDK",
-            company_name,
-            website
-        )
-        api_findings = self._analyze_apis(api_info, company_name)
+        api_findings = self._analyze_apis(interop_info, company_name)
         findings.extend(api_findings)
         
-        # 3. Webhooks/Events
-        self.emit_event("agent_thinking", {"action": "Researching webhook support"})
-        webhook_info = self.research_requirement(
-            f"{company_name} webhooks outbound events event streams real-time notifications",
-            company_name,
-            website
-        )
-        webhook_findings = self._analyze_webhooks(webhook_info, company_name)
+        webhook_findings = self._analyze_webhooks(interop_info, company_name)
         findings.extend(webhook_findings)
         
-        # 4. Specific integrations (if mentioned in use case)
-        if "slack" in use_case.lower():
-            self.emit_event("agent_progress", {"action": "Researching Slack integration"})
-            slack_info = self.research_requirement(
-                f"{company_name} Slack integration",
-                company_name,
-                website
-            )
-            findings.extend(self._analyze_specific_integration(slack_info, company_name, "Slack"))
-        
-        if "jira" in use_case.lower():
-            self.emit_event("agent_progress", {"action": "Researching Jira integration"})
-            jira_info = self.research_requirement(
-                f"{company_name} Jira integration",
-                company_name,
-                website
-            )
-            findings.extend(self._analyze_specific_integration(jira_info, company_name, "Jira"))
-        
-        if "snowflake" in use_case.lower():
-            self.emit_event("agent_progress", {"action": "Researching Snowflake integration"})
-            snowflake_info = self.research_requirement(
-                f"{company_name} Snowflake data integration analytics",
-                company_name,
-                website
-            )
-            findings.extend(self._analyze_specific_integration(snowflake_info, company_name, "Snowflake"))
+        # Analyze specific integrations if mentioned
+        for integration in specific_integrations:
+            findings.extend(self._analyze_specific_integration(interop_info, company_name, integration))
         
         # Calculate score
         score = self._calculate_interoperability_score(findings, required_integrations)
@@ -104,17 +83,28 @@ class InteroperabilityAgent(BaseAgent):
         # Generate notes
         notes = self._generate_interoperability_notes(findings, company_name, required_integrations)
         
+        # Generate management-friendly summary
+        summary = self._generate_executive_summary(findings, score, company_name, required_integrations)
+        
+        # Extract key strengths and risks
+        strengths = [f for f in findings if any(kw in f.lower() for kw in ["supports", "available", "native", "comprehensive", "documented"])][:4]
+        risks = [f for f in findings if any(kw in f.lower() for kw in ["not", "unable", "unclear", "unavailable", "undocumented"])][:4]
+        
         # Create structured output
         output = self.create_structured_output(
             score=score,
             findings=findings,
             notes=notes,
+            summary=summary,
+            strengths=strengths,
+            risks=risks,
             apis=self._extract_api_types(api_findings)
         )
         
         self.emit_event("agent_complete", {
             "status": "completed",
             "score": score,
+            "summary": summary,
             "findings_count": len(findings),
             "sources_count": len(self.sources)
         })
@@ -123,6 +113,9 @@ class InteroperabilityAgent(BaseAgent):
     
     def _extract_integration_requirements(self, use_case: str) -> List[str]:
         """Extract specific integration requirements from use case."""
+        if not use_case:
+            return []  # No requirements if use_case is empty
+        
         requirements = []
         use_case_lower = use_case.lower()
         
@@ -324,3 +317,23 @@ Return JSON: {{"{integration_name.lower()}_integration": ["finding1", "finding2"
             return f"Integration evaluation based on {len(self.sources)} sources. {requirements_met}/{len(requirements)} specified integrations verified. {len(findings)} total findings. Confidence: {self._calculate_confidence()}"
         else:
             return f"Integration evaluation based on {len(self.sources)} sources. {len(findings)} capabilities documented. Confidence: {self._calculate_confidence()}"
+    
+    def _generate_executive_summary(self, findings: List[str], score: float, vendor_name: str, requirements: List[str]) -> str:
+        """Generate a 2-3 sentence executive summary suitable for management."""
+        requirements_met = sum(1 for req in requirements if any(req.lower() in f.lower() for f in findings))
+        api_types = self._extract_api_types(findings)
+        
+        if score >= 4.0:
+            api_str = ", ".join(api_types) if api_types else "modern APIs"
+            req_str = f" including {requirements_met}/{len(requirements)} required integrations" if requirements else ""
+            return f"{vendor_name} provides comprehensive integration capabilities with {api_str}{req_str}. Documentation is strong and implementation risk is low."
+        elif score >= 3.0:
+            return f"{vendor_name} offers solid integration options with {len(api_types)} API types documented. {len(findings)} capabilities verified, though some integration patterns may require custom development."
+        elif score >= 2.0:
+            missing = len(requirements) - requirements_met if requirements else 0
+            return f"{vendor_name} has limited integration documentation with {missing} critical integrations unverified. API capabilities exist but require detailed technical discovery before commitment."
+        else:
+            if len(self.sources) == 0:
+                return f"Could not verify integration capabilities for {vendor_name} from accessible documentation. API documentation, SSO setup guides, and integration examples must be obtained from vendor."
+            else:
+                return f"{vendor_name} integration posture is weak with minimal API documentation and unclear support for required systems. Not recommended without comprehensive integration workshop and proof of concept."

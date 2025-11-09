@@ -122,7 +122,7 @@ class BaseAgent(ABC):
         """Add an ambiguity/assumption to document."""
         self.ambiguities.append(ambiguity)
     
-    def research_requirement(
+    async def research_requirement(
         self,
         requirement_query: str,
         vendor_name: str,
@@ -130,7 +130,7 @@ class BaseAgent(ABC):
         context_description: str = ""
     ) -> str:
         """
-        Research a specific requirement using multi-step RAG.
+        Research a specific requirement using single comprehensive search.
         
         Args:
             requirement_query: Specific query (e.g., "ServiceNow SAML SSO Okta support")
@@ -142,30 +142,50 @@ class BaseAgent(ABC):
             Summary text of findings
         """
         self.emit_event("agent_progress", {
-            "action": "researching",
-            "query": requirement_query
+            "action": "web_search_initiated",
+            "query": requirement_query,
+            "vendor": vendor_name,
+            "message": f"🔍 Searching web for: {requirement_query[:100]}"
         })
         
-        # Use enhanced search
-        sources = self.client.search_with_followup(
+        # Use single comprehensive search (saves API quota)
+        sources = await self.client.search_with_followup(
             initial_query=requirement_query,
             vendor_name=vendor_name,
             base_website=vendor_website,
-            max_hops=3
+            max_hops=1  # Single search
         )
         
         # Add sources to agent's source list
         for source in sources:
             self.add_source(source)
         
+        # Emit detailed results for judges to see
         self.emit_event("agent_progress", {
             "action": "sources_discovered",
             "count": len(sources),
-            "urls": [s["url"] for s in sources[:3]]
+            "urls": [s["url"] for s in sources[:3]],
+            "message": f"✅ Found {len(sources)} documentation sources",
+            "details": {
+                "sources": [
+                    {
+                        "url": s["url"],
+                        "title": s.get("title", ""),
+                        "credibility": s.get("credibility", "unknown"),
+                        "excerpt": s.get("excerpt", "")[:150] + "..." if s.get("excerpt") else ""
+                    }
+                    for s in sources[:3]
+                ]
+            }
         })
         
         # Synthesize findings from sources
         if not sources:
+            self.emit_event("agent_progress", {
+                "action": "no_sources_found",
+                "message": "⚠️ No accessible documentation found - will use general knowledge",
+                "query": requirement_query
+            })
             return f"No accessible documentation found for: {requirement_query}"
         
         # Combine excerpts for analysis
@@ -196,6 +216,16 @@ class BaseAgent(ABC):
         Returns:
             Parsed JSON response
         """
+        # Emit event showing LLM is being called (for judges to see)
+        self.emit_event("agent_progress", {
+            "action": "llm_reasoning",
+            "message": "🤖 Analyzing with Nemotron AI...",
+            "details": {
+                "system_prompt": (system_prompt[:200] + "...") if system_prompt and len(system_prompt) > 200 else system_prompt,
+                "user_prompt": (prompt[:300] + "...") if len(prompt) > 300 else prompt
+            }
+        })
+        
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -215,7 +245,18 @@ class BaseAgent(ABC):
                 end = response_text.find("```", start)
                 response_text = response_text[start:end].strip()
             
-            return json.loads(response_text)
+            result = json.loads(response_text)
+            
+            # Emit event showing LLM completed analysis
+            self.emit_event("agent_progress", {
+                "action": "llm_complete",
+                "message": "✅ AI analysis complete",
+                "details": {
+                    "response_preview": str(result)[:200] + "..." if len(str(result)) > 200 else str(result)
+                }
+            })
+            
+            return result
         except json.JSONDecodeError as e:
             print(f"Error parsing JSON response: {e}")
             print(f"Response text: {response_text}")
