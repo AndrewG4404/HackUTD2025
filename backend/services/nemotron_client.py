@@ -10,17 +10,30 @@ from bs4 import BeautifulSoup
 
 
 class NemotronClient:
-    """Client for NVIDIA Nemotron API using OpenAI-compatible interface"""
+    """
+    Client for NVIDIA Nemotron API using OpenAI-compatible interface.
+    Supports both cloud API and local NIM deployment.
+    """
     
     def __init__(self):
         self.api_key = os.getenv("NEMOTRON_API_KEY", "")
         self.model = os.getenv("NEMOTRON_MODEL", "nvidia/nvidia-nemotron-nano-9b-v2")
         
-        # Initialize OpenAI client with NVIDIA endpoint
+        # Support both cloud API and local NIM deployment
+        # Default to cloud API if not specified
+        self.base_url = os.getenv("NEMOTRON_API_URL", "https://integrate.api.nvidia.com/v1")
+        
+        # Initialize OpenAI client with configured endpoint
         self.client = OpenAI(
-            base_url="https://integrate.api.nvidia.com/v1",
-            api_key=self.api_key
+            base_url=self.base_url,
+            api_key=self.api_key if self.api_key else "not-needed-for-local"
         )
+        
+        # Log configuration for debugging
+        is_local = "localhost" in self.base_url or "127.0.0.1" in self.base_url
+        print(f"[NemotronClient] Initialized with {'LOCAL NIM' if is_local else 'CLOUD API'}")
+        print(f"[NemotronClient] Endpoint: {self.base_url}")
+        print(f"[NemotronClient] Model: {self.model}")
     
     def chat_completion(
         self,

@@ -160,10 +160,65 @@ See `backend/API_TESTING.md` for detailed testing examples.
 See `.env.example` for required environment variables:
 - `MONGODB_URI` - MongoDB connection string
 - `MONGODB_DB_NAME` - Database name
-- `NEMOTRON_API_URL` - Nemotron API endpoint
+- `NEMOTRON_API_URL` - Nemotron API endpoint (cloud or local)
 - `NEMOTRON_API_KEY` - Nemotron API key
 - `UPLOAD_DIR` - Directory for file uploads
 - `NEXT_PUBLIC_API_URL` - Backend API URL for frontend
+
+## Bypassing Rate Limits with Local NIM
+
+The NVIDIA cloud API has rate limits. To bypass them during development:
+
+### Quick Start (One Command)
+
+```bash
+# Set your NGC API key
+export NGC_API_KEY=your-ngc-api-key-here
+
+# Deploy local NIM
+./deploy_local_nim.sh
+```
+
+### Manual Setup
+
+1. **Login to NVIDIA Container Registry:**
+```bash
+docker login nvcr.io
+# Username: $oauthtoken
+# Password: your-ngc-api-key
+```
+
+2. **Run the NIM container:**
+```bash
+export NGC_API_KEY=your-ngc-api-key
+export LOCAL_NIM_CACHE=~/.cache/nim
+mkdir -p "$LOCAL_NIM_CACHE"
+
+docker run -it --rm \
+    --gpus all \
+    --shm-size=16GB \
+    -e NGC_API_KEY \
+    -v "$LOCAL_NIM_CACHE:/opt/nim/.cache" \
+    -u $(id -u) \
+    -p 8000:8000 \
+    nvcr.io/nim/nvidia/nvidia-nemotron-nano-9b-v2:latest
+```
+
+3. **Update your `.env` file:**
+```bash
+NEMOTRON_API_URL=http://localhost:8000/v1
+NEMOTRON_API_KEY=not-needed-for-local
+BACKEND_PORT=8001  # Use different port since NIM uses 8000
+```
+
+4. **Test the deployment:**
+```bash
+./test_nim.sh
+```
+
+See `backend/LOCAL_NIM_SETUP.md` for detailed documentation.
+
+**Note:** Requires NVIDIA GPU with Docker GPU support (`nvidia-docker2`)
 
 ## Agent Workflow (Teammate #2)
 
@@ -171,6 +226,8 @@ See `.env.example` for required environment variables:
 
 **Nemotron Client** (`backend/services/nemotron_client.py`)
 - OpenAI-compatible client for NVIDIA Nemotron API
+- **Supports both cloud API and local NIM deployment**
+- Automatically detects endpoint from `NEMOTRON_API_URL`
 - Chat completion with JSON support
 - Web scraping for URL fetching
 
