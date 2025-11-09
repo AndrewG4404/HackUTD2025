@@ -411,6 +411,125 @@ export default function EvaluationPage() {
                         </div>
                       </div>
                     </Card>
+                    
+                    {/* NEW: Fit vs Requirements Matrix */}
+                    <Card>
+                      <h3 className="text-xl font-semibold mb-4 text-white">Fit vs Requirements</h3>
+                      {(() => {
+                        const pv = evaluation.analysis?.per_vendor?.[evaluation.vendors[0]?.id || 'primary'];
+                        if (!pv) return <p className="text-gray-400">No analysis available</p>;
+                        const dims: {key: 'security'|'interoperability'|'finance'|'adoption'; label: string}[] = [
+                          {key: 'security', label: 'Compliance & Security'},
+                          {key: 'interoperability', label: 'Technical Interoperability'},
+                          {key: 'finance', label: 'Finance & TCO'},
+                          {key: 'adoption', label: 'Adoption & Support'}
+                        ];
+
+                        return (
+                          <div className="grid md:grid-cols-2 gap-4">
+                            {dims.map(({key, label}) => {
+                              const d = pv[key] || {};
+                              const align = d.requirements_alignment || {};
+                              const entries = Object.entries(align);
+                              return (
+                                <div key={key} className="rounded-lg border border-slate-700/80 bg-slate-800/50 p-4">
+                                  <div className="flex justify-between items-center mb-2">
+                                    <span className="font-semibold text-slate-100">{label}</span>
+                                    <span className="text-xs px-2 py-1 rounded-full bg-slate-700 border border-slate-600 text-slate-200">
+                                      {typeof pv.dimension_scores?.[key] === 'number' ? pv.dimension_scores[key].toFixed(1) : '—'}/5
+                                    </span>
+                                  </div>
+                                  {entries.length ? (
+                                    <ul className="text-xs space-y-1">
+                                      {entries.map(([req, status]) => (
+                                        <li key={req} className="flex items-center justify-between gap-2">
+                                          <span className="text-slate-300 truncate flex-1">{req}</span>
+                                          <span className={`px-2 py-0.5 rounded text-[11px] flex-shrink-0 ${
+                                            status === 'met'
+                                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                              : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                          }`}>
+                                            {status === 'met' ? 'Met' : 'Unmet'}
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : <p className="text-slate-400 text-sm">No explicit requirements mapped.</p>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </Card>
+
+                    {/* NEW: Failing Criteria with Evidence & Remediations */}
+                    <Card>
+                      <h3 className="text-xl font-semibold mb-4 text-white">Failing Criteria & Evidence</h3>
+                      {(() => {
+                        const pv = evaluation.analysis?.per_vendor?.[evaluation.vendors[0]?.id || 'primary'];
+                        if (!pv) return <p className="text-gray-400">No analysis available</p>;
+                        const dims = [
+                          {key:'security', label:'Compliance & Security'},
+                          {key:'interoperability', label:'Technical Interoperability'},
+                          {key:'finance', label:'Finance & TCO'},
+                          {key:'adoption', label:'Adoption & Support'}
+                        ];
+                        
+                        const hasAnyUnmet = dims.some(({key}) => {
+                          const d = pv[key as 'security'|'interoperability'|'finance'|'adoption'] || {};
+                          const unmet: string[] = d.unmet_requirements || [];
+                          return unmet.length > 0;
+                        });
+                        
+                        if (!hasAnyUnmet) {
+                          return <p className="text-green-400">✅ All requirements met! No failing criteria.</p>;
+                        }
+                        
+                        return (
+                          <div className="space-y-4">
+                            {dims.map(({key, label}) => {
+                              const d = pv[key as 'security'|'interoperability'|'finance'|'adoption'] || {};
+                              const unmet: string[] = d.unmet_requirements || [];
+                              if (!unmet.length) return null;
+                              const evidence: string[] = d.evidence_urls || [];
+                              const remediations: string[] = d.remediation_steps || [];
+                              return (
+                                <div key={key} className="rounded-lg border border-slate-700/80 bg-slate-800/50 p-4">
+                                  <div className="font-semibold text-slate-100 mb-2">{label}</div>
+                                  <div className="text-xs text-amber-300 mb-1">Unmet Requirements:</div>
+                                  <ul className="text-sm text-slate-300 list-disc list-inside mb-2">
+                                    {unmet.map((u,i) => (<li key={i}>{u}</li>))}
+                                  </ul>
+
+                                  {!!evidence.length && (
+                                    <>
+                                      <div className="text-xs text-sky-300 mb-1">Evidence:</div>
+                                      <ul className="text-sm mb-2">
+                                        {evidence.slice(0,3).map((url,i) => (
+                                          <li key={i} className="truncate">
+                                            <a className="text-cyan-300 underline hover:text-cyan-200" href={url} target="_blank" rel="noopener noreferrer">{url}</a>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </>
+                                  )}
+
+                                  {!!remediations.length && (
+                                    <>
+                                      <div className="text-xs text-emerald-300 mt-2 mb-1">Remediation Steps:</div>
+                                      <ul className="text-sm text-slate-300 list-disc list-inside">
+                                        {remediations.map((r,i) => (<li key={i}>{r}</li>))}
+                                      </ul>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </Card>
                   </div>
                 )}
                 

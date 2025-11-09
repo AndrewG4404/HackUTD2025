@@ -77,6 +77,36 @@ class AdoptionAgent(BaseAgent):
         # Generate recommendations
         recommendations = self._generate_recommendations(status, company_name, risks)
         
+        # NEW: Determine requirement alignment from org_policy
+        org_policy = context.get("org_policy", {})
+        adoption_expectations = org_policy.get("adoption_expectations", [])
+        
+        # Check which adoption expectations are met based on findings
+        normalized_findings = " ".join(findings).lower()
+        requirements_alignment = {}
+        unmet_requirements = []
+        
+        for expectation in adoption_expectations:
+            exp_lower = expectation.lower()
+            # Check if expectation is mentioned in findings
+            exp_keywords = exp_lower.replace("<", "").replace(">", "").replace("/", " ").split()
+            matched = any(keyword in normalized_findings for keyword in exp_keywords if len(keyword) > 3)
+            
+            if matched:
+                requirements_alignment[expectation] = "met"
+            else:
+                requirements_alignment[expectation] = "unmet"
+                unmet_requirements.append(expectation)
+        
+        # Generate remediation steps for unmet adoption expectations
+        remediation_steps = []
+        if "24/7 support" in unmet_requirements:
+            remediation_steps.append("Establish 24/7 support coverage across multiple time zones with defined SLAs for critical issues")
+        if any("timeline" in req.lower() and "12 weeks" in req.lower() for req in unmet_requirements):
+            remediation_steps.append("Develop accelerated onboarding program with dedicated customer success manager and pre-built templates")
+        if "Customer training materials" in unmet_requirements:
+            remediation_steps.append("Create comprehensive training program including video tutorials, documentation, and certification paths")
+        
         # Create structured output
         output = self.create_structured_output(
             score=score,
@@ -87,6 +117,9 @@ class AdoptionAgent(BaseAgent):
             risks=risks,
             status=status,
             recommendations=recommendations,
+            requirements_alignment=requirements_alignment,
+            unmet_requirements=unmet_requirements,
+            remediation_steps=remediation_steps,
             timeline=self._extract_timeline(impl_findings)
         )
         

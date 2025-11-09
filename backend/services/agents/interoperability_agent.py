@@ -93,6 +93,40 @@ class InteroperabilityAgent(BaseAgent):
         # Generate recommendations
         recommendations = self._generate_recommendations(status, company_name, risks, required_integrations)
         
+        # NEW: Determine requirement alignment from org_policy
+        org_policy = context.get("org_policy", {})
+        interop_targets = org_policy.get("interoperability_targets", [])
+        
+        # Check which integration targets are met based on findings
+        normalized_findings = " ".join(findings).lower()
+        requirements_alignment = {}
+        unmet_requirements = []
+        
+        for target in interop_targets:
+            target_lower = target.lower()
+            # Check if integration target is mentioned in findings
+            target_keywords = target_lower.replace("integration", "").strip().split()
+            matched = any(keyword in normalized_findings for keyword in target_keywords if len(keyword) > 2)
+            
+            if matched:
+                requirements_alignment[target] = "met"
+            else:
+                requirements_alignment[target] = "unmet"
+                unmet_requirements.append(target)
+        
+        # Generate remediation steps for unmet integration targets
+        remediation_steps = []
+        if "Okta SSO" in unmet_requirements:
+            remediation_steps.append("Implement Okta SSO integration using SAML 2.0 or OAuth 2.0 and provide setup documentation")
+        if "REST API" in unmet_requirements:
+            remediation_steps.append("Develop comprehensive REST API with documentation, rate limits, and authentication mechanisms")
+        if "Webhooks" in unmet_requirements:
+            remediation_steps.append("Implement outbound webhooks for event notifications with configurable endpoints and retry logic")
+        if "Jira integration" in unmet_requirements or "Jira" in unmet_requirements:
+            remediation_steps.append("Build native Jira integration or provide detailed API documentation for custom integration")
+        if "ServiceNow integration" in unmet_requirements or "ServiceNow" in unmet_requirements:
+            remediation_steps.append("Develop ServiceNow integration app or provide connector documentation for bi-directional sync")
+        
         # Create structured output
         output = self.create_structured_output(
             score=score,
@@ -103,6 +137,9 @@ class InteroperabilityAgent(BaseAgent):
             risks=risks,
             status=status,
             recommendations=recommendations,
+            requirements_alignment=requirements_alignment,
+            unmet_requirements=unmet_requirements,
+            remediation_steps=remediation_steps,
             apis=self._extract_api_types(api_findings)
         )
         

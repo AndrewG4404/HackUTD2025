@@ -217,7 +217,11 @@ def run_assessment_pipeline(evaluation_id: str) -> Dict[str, Any]:
             if scored_dimensions:
                 total_weighted = sum(score * weight for score, weight in scored_dimensions)
                 total_weight = sum(weight for _, weight in scored_dimensions)
-                weighted_score = total_weighted / total_weight if total_weight > 0 else None
+                if total_weight > 0:
+                    weighted_score = total_weighted / total_weight
+                else:
+                    # All weights are 0, use simple average
+                    weighted_score = sum(score for score, _ in scored_dimensions) / len(scored_dimensions)
             else:
                 weighted_score = None
             
@@ -397,7 +401,12 @@ async def run_assessment_pipeline_async(evaluation_id: str, event_callback=None)
             
             # Calculate weighted average (or None if all dimensions insufficient)
             if scored:
-                weighted = sum(score * w for score, w in scored) / sum(w for _, w in scored)
+                total_weight = sum(w for _, w in scored)
+                if total_weight > 0:
+                    weighted = sum(score * w for score, w in scored) / total_weight
+                else:
+                    # All weights are 0, use simple average
+                    weighted = sum(score for score, _ in scored) / len(scored)
             else:
                 weighted = None
             

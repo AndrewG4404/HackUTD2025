@@ -2,8 +2,44 @@
 Application Workflow Pipeline
 Orchestrates all agents for vendor application workflow
 """
-from typing import Dict, Any
+from typing import Dict, Any, List
 from database.repository import get_evaluation, update_evaluation
+
+
+def get_default_org_policy() -> Dict[str, Any]:
+    """
+    Get default organizational policy requirements.
+    In production, this could be loaded from database or config.
+    """
+    return {
+        "compliance_needs": [
+            "SOC 2 Type II",
+            "ISO 27001",
+            "GDPR",
+            "DPA (Data Processing Agreement)",
+            "SSO/SAML"
+        ],
+        "security_needs": [
+            "Encryption at rest and in transit",
+            "Audit logs",
+            "RBAC",
+            "MFA"
+        ],
+        "interoperability_targets": [
+            "Okta SSO",
+            "REST API",
+            "Webhooks"
+        ],
+        "financial_targets": {
+            "max_per_user_per_month": 100,
+            "tco_horizon_years": 3
+        },
+        "adoption_expectations": [
+            "24/7 support",
+            "Implementation timeline < 12 weeks",
+            "Customer training materials"
+        ]
+    }
 from services.agents.intake_agent import IntakeAgent
 from services.agents.verification_agent import VerificationAgent
 from services.agents.compliance_agent import ComplianceAgent
@@ -188,6 +224,17 @@ async def run_application_pipeline_async(evaluation_id: str, event_callback=None
         company_name = vendor.get("name", "Unknown")
         print(f"Evaluating vendor: {company_name}\n")
         
+        # Get org policy and inject into evaluation
+        org_policy = get_default_org_policy()
+        evaluation["requirement_profile"] = {
+            "critical_requirements": org_policy["compliance_needs"] + org_policy["security_needs"],
+            "integration_targets": org_policy["interoperability_targets"],
+            "dimension_importance": {
+                "security": 5, "cost": 4, "interoperability": 5, "adoption": 4
+            }
+        }
+        update_evaluation(evaluation_id, {"requirement_profile": evaluation["requirement_profile"]})
+        
         # Initialize agents with event callback
         intake = IntakeAgent(event_callback=event_callback)
         verification = VerificationAgent(event_callback=event_callback)
@@ -200,10 +247,11 @@ async def run_application_pipeline_async(evaluation_id: str, event_callback=None
         # Agent outputs storage
         agent_outputs = {}
         
-        # Build initial context
+        # Build initial context with org_policy
         context = {
             "vendor": vendor,
-            "evaluation": evaluation
+            "evaluation": evaluation,
+            "org_policy": org_policy
         }
         
         # Execute pipeline
@@ -248,6 +296,33 @@ async def run_application_pipeline_async(evaluation_id: str, event_callback=None
         print("[7/7] Running Summary Agent...")
         summary_output = summary.execute(context)
         
+        # Build analysis structure (consistent with assessment workflow)
+        ao = agent_outputs
+        vendor_id = vendor.get("id", "primary")
+        analysis = {
+            "per_vendor": {
+                vendor_id: {
+                    "headline": f"Application assessment for {vendor.get('name')}",
+                    "dimension_scores": {
+                        "security": ao.get("compliance", {}).get("score"),
+                        "interoperability": ao.get("interoperability", {}).get("score"),
+                        "finance": ao.get("finance", {}).get("score"),
+                        "adoption": ao.get("adoption", {}).get("score")
+                    },
+                    "security": ao.get("compliance", {}),
+                    "interoperability": ao.get("interoperability", {}),
+                    "finance": ao.get("finance", {}),
+                    "adoption": ao.get("adoption", {}),
+                    "vendor_explanation": summary_output.get("vendor_explanation", {})
+                }
+            },
+            "final_recommendation": {
+                "recommended_vendor_id": vendor_id,
+                "short_reason": summary_output.get("recommendation", ""),
+                "detailed_reason": summary_output.get("recommendation", "")
+            }
+        }
+        
         # Update vendor with results
         update_data = {
             "status": "completed",
@@ -258,9 +333,10 @@ async def run_application_pipeline_async(evaluation_id: str, event_callback=None
             }],
             "onboarding_checklist": summary_output.get("onboarding_checklist", []),
             "recommendation": {
-                "vendor_id": vendor.get("id", "vendor-1"),
+                "vendor_id": vendor_id,
                 "reason": summary_output.get("recommendation", "Evaluation completed")
-            }
+            },
+            "analysis": analysis
         }
         
         update_evaluation(evaluation_id, update_data)

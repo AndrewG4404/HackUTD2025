@@ -78,6 +78,40 @@ class FinanceAgent(BaseAgent):
         # Generate recommendations
         recommendations = self._generate_recommendations(status, company_name, risks)
         
+        # NEW: Determine requirement alignment from org_policy
+        org_policy = context.get("org_policy", {})
+        financial_targets = org_policy.get("financial_targets", {})
+        max_per_user_monthly = financial_targets.get("max_per_user_per_month", 100)
+        
+        # Check if financial targets are met
+        requirements_alignment = {}
+        unmet_requirements = []
+        per_user_monthly = tco_estimate.get("per_user_per_month_estimate", 0)
+        
+        cost_req = f"Cost per user ≤ ${max_per_user_monthly}/month"
+        if per_user_monthly <= max_per_user_monthly:
+            requirements_alignment[cost_req] = "met"
+        else:
+            requirements_alignment[cost_req] = "unmet"
+            unmet_requirements.append(cost_req)
+        
+        # Check for pricing transparency
+        transparency_req = "Transparent pricing available"
+        if len(self.sources) >= 2 and status == "ok":
+            requirements_alignment[transparency_req] = "met"
+        else:
+            requirements_alignment[transparency_req] = "unmet"
+            unmet_requirements.append(transparency_req)
+        
+        # Generate remediation steps for unmet financial requirements
+        remediation_steps = []
+        if cost_req in unmet_requirements:
+            remediation_steps.append(f"Negotiate volume discount to bring per-user cost down from ${per_user_monthly:.0f}/month to ${max_per_user_monthly}/month or below")
+            remediation_steps.append("Explore lower-tier plans or commit to multi-year contract for better pricing")
+        if transparency_req in unmet_requirements:
+            remediation_steps.append("Provide detailed pricing breakdown including all tiers, implementation costs, and support fees")
+            remediation_steps.append("Share customer references with similar deployment sizes for TCO validation")
+        
         # Create structured output
         output = self.create_structured_output(
             score=score,
@@ -88,6 +122,9 @@ class FinanceAgent(BaseAgent):
             risks=risks,
             status=status,
             recommendations=recommendations,
+            requirements_alignment=requirements_alignment,
+            unmet_requirements=unmet_requirements,
+            remediation_steps=remediation_steps,
             pricing_model=self._extract_pricing_model(pricing_findings),
             estimated_tco=tco_estimate
         )

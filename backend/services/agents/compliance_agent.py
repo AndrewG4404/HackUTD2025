@@ -75,6 +75,50 @@ class ComplianceAgent(BaseAgent):
         # Generate recommendations based on status
         recommendations = self._generate_recommendations(status, company_name, risks)
         
+        # NEW: Determine requirement alignment from org_policy
+        org_policy = context.get("org_policy", {})
+        compliance_reqs = org_policy.get("compliance_needs", [])
+        security_reqs = org_policy.get("security_needs", [])
+        all_reqs = compliance_reqs + security_reqs
+        
+        # Check which requirements are met based on findings
+        normalized_findings = " ".join(findings).lower()
+        requirements_alignment = {}
+        unmet_requirements = []
+        
+        for req in all_reqs:
+            req_lower = req.lower()
+            # Simple keyword matching - check if requirement terms appear in findings
+            req_keywords = req_lower.replace("(", "").replace(")", "").split()
+            matched = any(keyword in normalized_findings for keyword in req_keywords if len(keyword) > 3)
+            
+            if matched:
+                requirements_alignment[req] = "met"
+            else:
+                requirements_alignment[req] = "unmet"
+                unmet_requirements.append(req)
+        
+        # Generate remediation steps for unmet requirements
+        remediation_steps = []
+        if "SOC 2 Type II" in unmet_requirements:
+            remediation_steps.append("Provide SOC 2 Type II attestation or undergo audit with accredited third-party auditor")
+        if "ISO 27001" in unmet_requirements:
+            remediation_steps.append("Provide current ISO 27001 certificate and Statement of Applicability (SoA)")
+        if "GDPR" in unmet_requirements:
+            remediation_steps.append("Document GDPR compliance measures and provide Data Protection Impact Assessment (DPIA)")
+        if "DPA (Data Processing Agreement)" in unmet_requirements:
+            remediation_steps.append("Provide signed DPA template addressing data ownership, retention, and deletion policies")
+        if "SSO/SAML" in unmet_requirements:
+            remediation_steps.append("Implement SAML 2.0 SSO support and provide integration documentation")
+        if "Encryption at rest and in transit" in unmet_requirements:
+            remediation_steps.append("Document encryption standards (AES-256, TLS 1.2+) and provide security architecture diagram")
+        if "Audit logs" in unmet_requirements:
+            remediation_steps.append("Enable comprehensive audit logging with tamper-proof storage and provide log retention policy")
+        if "RBAC" in unmet_requirements:
+            remediation_steps.append("Implement Role-Based Access Control with granular permissions and provide RBAC matrix")
+        if "MFA" in unmet_requirements:
+            remediation_steps.append("Implement Multi-Factor Authentication for all user accounts and provide MFA enforcement policy")
+        
         # Create structured output
         output = self.create_structured_output(
             score=score,
@@ -84,7 +128,10 @@ class ComplianceAgent(BaseAgent):
             strengths=strengths,
             risks=risks,
             status=status,
-            recommendations=recommendations
+            recommendations=recommendations,
+            requirements_alignment=requirements_alignment,
+            unmet_requirements=unmet_requirements,
+            remediation_steps=remediation_steps
         )
         
         self.emit_event("agent_complete", {

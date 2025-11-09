@@ -72,6 +72,10 @@ class BaseAgent(ABC):
         notes: str = "",
         status: str = "ok",
         recommendations: Optional[List[str]] = None,
+        requirements_alignment: Optional[Dict[str, Any]] = None,  # NEW: per-requirement met/unmet status
+        unmet_requirements: Optional[List[str]] = None,           # NEW: list of unmet requirements
+        evidence_urls: Optional[List[str]] = None,                # NEW: list of evidence URLs
+        remediation_steps: Optional[List[str]] = None,            # NEW: list of remediation actions
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -83,6 +87,10 @@ class BaseAgent(ABC):
             notes: Additional notes/summary
             status: Dimension status ("ok", "insufficient_data", or "risk")
             recommendations: List of actionable recommendations
+            requirements_alignment: Dict mapping requirement -> "met"/"unmet"
+            unmet_requirements: List of requirements that weren't met
+            evidence_urls: List of URLs used as evidence
+            remediation_steps: List of steps vendor can take to meet requirements
             **kwargs: Additional agent-specific fields
         
         Returns:
@@ -90,6 +98,10 @@ class BaseAgent(ABC):
         """
         # Calculate confidence based on sources
         confidence = self._calculate_confidence()
+        
+        # Extract evidence URLs from sources if not provided
+        if evidence_urls is None:
+            evidence_urls = [s.get("url") for s in self.sources if s.get("url")]
         
         output = {
             "score": round(score, 2) if score is not None else None,
@@ -100,6 +112,10 @@ class BaseAgent(ABC):
             "ambiguities": self.ambiguities,
             "confidence": confidence,
             "recommendations": recommendations or [],
+            "requirements_alignment": requirements_alignment or {},
+            "unmet_requirements": unmet_requirements or [],
+            "evidence_urls": evidence_urls or [],
+            "remediation_steps": remediation_steps or [],
             **kwargs
         }
         

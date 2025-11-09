@@ -256,32 +256,56 @@ export default function AssessPage() {
                 {dashboardLoading ? (
                   <div className="text-center py-8 text-gray-400">Loading...</div>
                 ) : recentEvaluations.length > 0 ? (
-                  recentEvaluations.map((evaluation) => (
-                    <div 
-                      key={evaluation._id} 
-                      className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5 hover:border-blue-500/30 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/evaluations/${evaluation.id || evaluation._id}`)}
-                    >
-                      <div>
-                        <div className="text-white font-medium">{evaluation.name}</div>
-                        <div className="text-sm text-gray-400">
-                          {evaluation.vendor_count || 0} vendor{evaluation.vendor_count !== 1 ? 's' : ''} • {' '}
-                          {new Date(evaluation.created_at).toLocaleDateString()}
+                  <>
+                    {recentEvaluations.map((evaluation) => {
+                      // Get vendor decision info
+                      const vendors = evaluation.vendors || [];
+                      const hasDecisions = vendors.some((v: any) => v.decision && v.decision.status !== 'pending');
+                      const approvedCount = vendors.filter((v: any) => v.decision && (v.decision.status === 'approved' || v.decision.status === 'approved_pending_actions')).length;
+                      const declinedCount = vendors.filter((v: any) => v.decision && v.decision.status === 'declined').length;
+                      
+                      return (
+                        <div 
+                          key={evaluation.id || evaluation._id} 
+                          className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5 hover:border-blue-500/30 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/evaluations/${evaluation.id || evaluation._id}`)}
+                        >
+                          <div className="flex-1">
+                            <div className="text-white font-medium">{evaluation.name}</div>
+                            <div className="text-sm text-gray-400 flex items-center gap-2">
+                              {evaluation.vendor_count || 0} vendor{evaluation.vendor_count !== 1 ? 's' : ''} • {' '}
+                              {new Date(evaluation.created_at).toLocaleDateString()}
+                              {hasDecisions && (
+                                <>
+                                  {approvedCount > 0 && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs">
+                                      ✓ {approvedCount} approved
+                                    </span>
+                                  )}
+                                  {declinedCount > 0 && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-500/20 text-red-400 rounded text-xs">
+                                      ✗ {declinedCount} declined
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-4">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              evaluation.status === 'completed' || evaluation.status === 'finalized' ? 'bg-green-500/20 text-green-400' :
+                              evaluation.status === 'running' ? 'bg-blue-500/20 text-blue-400' :
+                              evaluation.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                              'bg-yellow-500/20 text-yellow-400'
+                            }`}>
+                              {evaluation.status.charAt(0).toUpperCase() + evaluation.status.slice(1)}
+                            </span>
+                            <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">View →</button>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          evaluation.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                          evaluation.status === 'running' ? 'bg-blue-500/20 text-blue-400' :
-                          evaluation.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                          'bg-yellow-500/20 text-yellow-400'
-                        }`}>
-                          {evaluation.status.charAt(0).toUpperCase() + evaluation.status.slice(1)}
-                        </span>
-                        <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">View →</button>
-                      </div>
-                    </div>
-                  ))
+                      );
+                    })}
+                  </>
                 ) : (
                   <div className="text-center py-8 text-gray-400">
                     <p className="mb-2">No assessments yet</p>

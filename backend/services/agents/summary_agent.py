@@ -19,6 +19,7 @@ class SummaryAgent(BaseAgent):
         vendor = context.get("vendor", {})
         company_name = vendor.get("name", "Unknown")
         agent_outputs = vendor.get("agent_outputs", {})
+        org_policy = context.get("org_policy", {})
         
         # Extract scores from all agents
         scores = {
@@ -30,6 +31,36 @@ class SummaryAgent(BaseAgent):
         
         # Calculate overall score
         total_score = sum(scores.values()) / len(scores) if scores else 0
+        
+        # NEW: Build vendor-facing explanation
+        def collect_dimension_feedback(dim_key: str, title: str):
+            dim = agent_outputs.get(dim_key, {}) or {}
+            return {
+                "title": title,
+                "status": dim.get("status", "unknown"),
+                "score": dim.get("score"),
+                "unmet_requirements": dim.get("unmet_requirements", []),
+                "summary": dim.get("summary", ""),
+                "evidence_urls": dim.get("evidence_urls", []),
+                "remediation_steps": dim.get("remediation_steps", []),
+            }
+        
+        per_dimension_feedback = [
+            collect_dimension_feedback("compliance", "Compliance & Security"),
+            collect_dimension_feedback("interoperability", "Technical Interoperability"),
+            collect_dimension_feedback("finance", "Finance & TCO"),
+            collect_dimension_feedback("adoption", "Adoption & Support")
+        ]
+        
+        # Compose vendor-facing explanation
+        compliance_sample = ", ".join(org_policy.get("compliance_needs", [])[:3])
+        interop_sample = ", ".join(org_policy.get("interoperability_targets", [])[:2])
+        
+        vendor_explanation = {
+            "overview": f"Our organization requires {compliance_sample} and integrations such as {interop_sample}. Based on publicly available documentation and the detailed analysis below, certain critical requirements were not met.",
+            "per_dimension": per_dimension_feedback,
+            "final_decision_context": "Decision is made in the context of a regulated financial services environment with strict compliance and security requirements."
+        }
         
         # Build context for LLM
         context_summary = f"""Vendor: {company_name}
@@ -94,6 +125,7 @@ Provide your recommendation in JSON format:
                 result["overall_risk_score"] = 5.0 - total_score
             
             print(f"[{self.name}] Summary complete for {company_name}: {result['recommendation'][:50]}")
+            result["vendor_explanation"] = vendor_explanation
             return result
             
         except Exception as e:
@@ -101,6 +133,7 @@ Provide your recommendation in JSON format:
             return {
                 "overall_risk_score": 5.0 - total_score,
                 "recommendation": "Evaluation incomplete",
-                "onboarding_checklist": ["Complete vendor evaluation"]
+                "onboarding_checklist": ["Complete vendor evaluation"],
+                "vendor_explanation": vendor_explanation
             }
 
