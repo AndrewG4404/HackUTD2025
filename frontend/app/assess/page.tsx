@@ -4,10 +4,10 @@
  */
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
-import type { AssessmentFormData } from '@/lib/types'
+import type { AssessmentFormData, EvaluationSummary } from '@/lib/types'
 import Button from '@/components/ui/Button'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 
@@ -24,6 +24,8 @@ const COLORS = ['#3b82f6', '#06b6d4', '#8b5cf6', '#ec4899']
 export default function AssessPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [evaluations, setEvaluations] = useState<EvaluationSummary[]>([])
+  const [dashboardLoading, setDashboardLoading] = useState(true)
   const [formData, setFormData] = useState({
     name: '',
     use_case: '',
@@ -39,6 +41,34 @@ export default function AssessPage() {
     { id: 'vendor-b', name: '', website: '', files: [], doc_urls: '' }
   ])
   const [showForm, setShowForm] = useState(false)
+
+  // Fetch evaluations for dashboard stats
+  useEffect(() => {
+    const fetchEvaluations = async () => {
+      try {
+        const data = await api.listEvaluations()
+        setEvaluations(data)
+      } catch (error) {
+        console.error('Error fetching evaluations:', error)
+      } finally {
+        setDashboardLoading(false)
+      }
+    }
+    
+    if (!showForm) {
+      fetchEvaluations()
+    }
+  }, [showForm])
+
+  // Calculate dashboard stats from actual data
+  const totalAssessments = evaluations.filter(e => e.type === 'assessment').length
+  const activeEvaluations = evaluations.filter(e => e.status === 'running' || e.status === 'pending').length
+  const completedEvaluations = evaluations.filter(e => e.status === 'completed')
+  const totalVendorsEvaluated = evaluations.reduce((sum, e) => sum + (e.vendor_count || 0), 0)
+  const recentEvaluations = evaluations
+    .filter(e => e.type === 'assessment')
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 3)
 
   // Prepare chart data for weights
   const weightChartData = Object.entries(formData.weights).map(([key, value]) => ({
@@ -107,23 +137,31 @@ export default function AssessPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
                 <div className="text-sm text-gray-400 mb-1">Total Assessments</div>
-                <div className="text-3xl font-bold text-white">12</div>
-                <div className="text-xs text-green-400 mt-2">+3 this month</div>
+                <div className="text-3xl font-bold text-white">
+                  {dashboardLoading ? '—' : totalAssessments}
+                </div>
+                <div className="text-xs text-green-400 mt-2">All time</div>
               </div>
               <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
                 <div className="text-sm text-gray-400 mb-1">Active Evaluations</div>
-                <div className="text-3xl font-bold text-white">5</div>
+                <div className="text-3xl font-bold text-white">
+                  {dashboardLoading ? '—' : activeEvaluations}
+                </div>
                 <div className="text-xs text-blue-400 mt-2">In progress</div>
               </div>
               <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
                 <div className="text-sm text-gray-400 mb-1">Vendors Evaluated</div>
-                <div className="text-3xl font-bold text-white">28</div>
+                <div className="text-3xl font-bold text-white">
+                  {dashboardLoading ? '—' : totalVendorsEvaluated}
+                </div>
                 <div className="text-xs text-cyan-400 mt-2">All time</div>
               </div>
               <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
-                <div className="text-sm text-gray-400 mb-1">Avg. Processing Time</div>
-                <div className="text-3xl font-bold text-white">4.2m</div>
-                <div className="text-xs text-purple-400 mt-2">Per evaluation</div>
+                <div className="text-sm text-gray-400 mb-1">Completed</div>
+                <div className="text-3xl font-bold text-white">
+                  {dashboardLoading ? '—' : completedEvaluations.length}
+                </div>
+                <div className="text-xs text-purple-400 mt-2">Successfully finished</div>
               </div>
             </div>
 
@@ -208,18 +246,41 @@ export default function AssessPage() {
             <div className="backdrop-blur-xl bg-black/30 border border-white/10 rounded-xl p-6">
               <h3 className="text-xl font-bold text-white mb-4">Recent Assessments</h3>
               <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5 hover:border-blue-500/30 transition-colors">
-                    <div>
-                      <div className="text-white font-medium">Q1 2025 CRM Evaluation</div>
-                      <div className="text-sm text-gray-400">3 vendors • Completed 2 days ago</div>
+                {dashboardLoading ? (
+                  <div className="text-center py-8 text-gray-400">Loading...</div>
+                ) : recentEvaluations.length > 0 ? (
+                  recentEvaluations.map((evaluation) => (
+                    <div 
+                      key={evaluation._id} 
+                      className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5 hover:border-blue-500/30 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/evaluations/${evaluation.id || evaluation._id}`)}
+                    >
+                      <div>
+                        <div className="text-white font-medium">{evaluation.name}</div>
+                        <div className="text-sm text-gray-400">
+                          {evaluation.vendor_count || 0} vendor{evaluation.vendor_count !== 1 ? 's' : ''} • {' '}
+                          {new Date(evaluation.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          evaluation.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                          evaluation.status === 'running' ? 'bg-blue-500/20 text-blue-400' :
+                          evaluation.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                          'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {evaluation.status.charAt(0).toUpperCase() + evaluation.status.slice(1)}
+                        </span>
+                        <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">View →</button>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-4">
-                      <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-medium">Completed</span>
-                      <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">View →</button>
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <p className="mb-2">No assessments yet</p>
+                    <p className="text-sm">Click "New Assessment" to get started</p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
